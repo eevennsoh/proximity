@@ -9,6 +9,10 @@ It requires [postman-slauthtoken](https://bitbucket.org/atlassian-developers/pos
 
 You can run it locally using `make` or run the image docker the docker compose file provided.
 
+```shell
+docker compose up -d
+```
+
 ### Routes available
 
 The OpenAI chat endpoint currently available. You can plug this into any project that expects an OpenAI api and it will work.
