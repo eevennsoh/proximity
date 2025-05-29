@@ -1,0 +1,116 @@
+
+# Example for testing
+
+baseEndpoint: https://ai-gateway.us-east-1.staging.atl-paas.net
+
+supportedUris:
+  - in: /openai/v1/chat/completions
+    out: /v1/openai/v1/chat/completions
+
+  - in: /anthropic/nostream/v1/messages
+    out: /v1/bedrock/model/anthropic.claude-3-7-sonnet-20250219-v1:0/invoke
+
+  # Serve Anthropic Claude but make it look like OpenAI for compatibility
+  - in: /anthropic-openai/nostream/v1/messages
+    out: /v1/bedrock/model/anthropic.claude-3-7-sonnet-20250219-v1:0/invoke
+
+  - in: /anthropic/stream/v1/messages
+    out: /v1/bedrock/model/anthropic.claude-3-7-sonnet-20250219-v1:0/invoke-with-response-stream
+
+  # - in: /v1/google/v1/publishers/google/models/gemini-1.5-pro-latest:generateContent
+
+overrides:
+  global:
+    headers:
+      # If no name is define for op: remove, then it removes all headers
+      - op: remove
+
+      - op: add
+        name: Content-Type
+        text: application/json
+      - op: add
+        name: Accept
+        text: application/json
+      - op: add
+        name: X-Atlassian-CloudId
+        text: a436116f-02ce-4520-8fbb-7301462a1674
+      - op: add
+        name: X-Atlassian-UseCaseId
+        text: autofix-service-internal
+      - op: add
+        name: Authorization
+        file: /Users/vportella/Desktop/Folder/Scripts/slauth-token
+        # command: -|
+        #   echo "slauth $(atlas slauth token -g atlassian-all --aud ai-gateway -e staging)" | tr -d "\n"
+  uris:
+    /anthropic/nostream/v1/messages:
+      body:
+        application/json:
+          - op: add
+            path: /anthropic_version
+            value: bedrock-2023-05-31
+
+          - op: add
+            path: /stream
+            value: ""
+          - op: add
+            path: /model
+            value: ""
+
+          - op: remove
+            path: /stream
+          - op: remove
+            path: /model
+      # response:
+      #   application/json:
+      #     - op: add
+      #       path: /model
+      #       value: anthropic.claude-3-5-haiku-20241022-v1:0
+
+    /anthropic/stream/v1/messages:
+      body:
+        application/json:
+          - op: add
+            path: /anthropic_version
+            value: bedrock-2023-05-31
+
+          - op: add
+            path: /stream
+            value: ""
+          - op: add
+            path: /model
+            value: ""
+
+          - op: remove
+            path: /stream
+          - op: remove
+            path: /model
+      # response:
+      #   application/json:
+      #     - op: add
+      #       path: /model
+      #       value: anthropic.claude-3-5-haiku-20241022-v1:0
+
+    /anthropic-openai/nostream/v1/messages:
+      body:
+        application/json:
+          - op: add
+            path: /anthropic_version
+            value: bedrock-2023-05-31
+
+          - op: add
+            path: /stream
+            value: ""
+          - op: add
+            path: /model
+            value: ""
+
+          - op: remove
+            path: /stream
+          - op: remove
+            path: /model
+      response:
+        application/json:
+          - op: add
+            path: /model
+            value: anthropic.claude-3-5-haiku-20241022-v1:0

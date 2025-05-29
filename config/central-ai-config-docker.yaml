@@ -1,0 +1,33 @@
+
+baseEndpoint: https://ai-gateway.us-east-1.staging.atl-paas.net
+
+supportedUris:
+  - in: /openai/v1/chat/completions
+    out: /v1/openai/v1/chat/completions
+
+overrides:
+  global:
+    headers:
+      # If no name is define for op: remove, then it removes all headers
+      - op: remove
+
+      - op: add
+        name: Content-Type
+        text: application/json
+      - op: add
+        name: Accept
+        text: application/json
+      - op: add
+        name: X-Atlassian-CloudId
+        text: a436116f-02ce-4520-8fbb-7301462a1674
+      - op: add
+        name: X-Atlassian-UseCaseId
+        text: autofix-service-internal
+      - op: add
+        name: Authorization
+        request:
+          method: POST
+          url: http://host.docker.internal:21298/rest/token
+          jsonBody: '{"audience":"ai-gateway","environment":"staging","groups":["atlassian-all"]}'
+          response:
+            resultPath: /bearerToken
