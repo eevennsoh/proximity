@@ -1,6 +1,6 @@
 
 VERSION = 0.0.1
-IMAGE = bitbucket.org/atlassian-developers/mini-proxy:$(VERSION)
+IMAGE = docker.atl-paas.net/vportella/central-ai-proxy:$(VERSION)
 ENVVAR ?= CGO_ENABLED=0
 
 # ARCH=$(if $(TARGETPLATFORM),$(lastword $(subst /, ,$(TARGETPLATFORM))),amd64)
@@ -34,3 +34,6 @@ build-linux:
 
 docker:
 	docker buildx build --build-arg ENVVAR="$(ENVVAR)" -t $(IMAGE) --platform linux/$(ARCH) .
+
+docker-push:
+	docker push $(IMAGE)
