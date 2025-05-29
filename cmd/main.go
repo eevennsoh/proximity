@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -38,8 +37,6 @@ func main() {
 
 	var args Args
 	arg.MustParse(&args)
-
-	fmt.Println(Config)
 
 	cfg, err := config.ReadConfig(Config)
 	if err != nil {
