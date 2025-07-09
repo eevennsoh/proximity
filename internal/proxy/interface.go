@@ -5,7 +5,8 @@ import (
 )
 
 type Options struct {
-	Port int
+	Port     int
+	TestMode bool
 }
 
 type Interface interface {

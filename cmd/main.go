@@ -17,7 +17,8 @@ import (
 var Config string
 
 type Args struct {
-	Port int `arg:"--port" default:"3001"`
+	Port     int  `arg:"--port" default:"3001"`
+	TestMode bool `arg:"--test-mode" default:"false"`
 }
 
 // awaitStopSignal awaits termination signals and shutdown gracefully by cancelling the context
@@ -44,7 +45,8 @@ func main() {
 	}
 
 	p := proxy.New(cfg, proxy.Options{
-		Port: args.Port,
+		Port:     args.Port,
+		TestMode: args.TestMode,
 	})
 
 	go p.RunServer(ctx)
