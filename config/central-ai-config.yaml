@@ -7,7 +7,11 @@ supportedUris:
 
   - in: /bedrock/claude/v1/messages
     out: |
-      /v1/bedrock/model/{{ normalizeModel .body.model "anthropic." "-v1:0" }}/invoke{{- if eq (index .body.stream) true -}}-with-response-stream{{- end -}}
+      /v1/bedrock/model/{{ trim .body.model "anthropic." "-v1:0" }}/invoke{{- if eq (index .body.stream) true -}}-with-response-stream{{- end -}}
+
+  - in: /provider/bedrock/format/openai/v1/chat/completions
+    out: |
+      /v1/bedrock/model/{{ trim .body.model "anthropic." "-v1:0" }}/invoke{{- if eq (index .body.stream) true -}}-with-response-stream{{- end -}}
 
 overrides:
   global:
@@ -89,3 +93,223 @@ overrides:
                 {{- end }}
               ]
             }
+
+      response:
+        body:
+          # TODO: add body response templating
+          template: |
+            {{- /* differentiate between whether the response is returned as an event stream or a full response */}}
+            {{- if .event }}
+              {{- if eq .event.type "message_stop" }}
+                { "type": "message_stop" }
+              {{- else if eq .event.type "message_start" }}
+                {
+                  "type": "message_start",
+                  "usage": {
+                    "input_tokens": {{ .event.message.usage.input_tokens }},
+                    "output_tokens": {{ .event.message.usage.output_tokens }}
+                  }
+                }
+              {{- else }}
+                {{ toJson .event }}
+              {{- end }}
+            {{- end }}
+
+    /provider/bedrock/format/openai/v1/chat/completions:
+      request:
+        body:
+          template: |
+            {
+              "anthropic_version": "bedrock-2023-05-31",
+
+              {{- /* set max tokens if max_tokens or max_completion_tokens are defined */}}
+              {{- if .body.max_tokens }}
+              "max_tokens": {{ .body.max_tokens }},
+              {{- else if .body.max_completion_tokens }}
+              "max_tokens": {{ .body.max_completion_tokens }},
+              {{- else}}
+              "max_tokens": 8192,
+              {{- end }}
+
+              {{- /* system prompt: first message with role == "system" */}}
+              {{- range $i, $msg := .body.messages }}
+                {{- if and (eq $msg.role "system") (eq $i 0) }}
+                  "system": "{{ safeEncode $msg.content }}",
+                {{- end }}
+              {{- end }}
+
+              {{- if .body.tools }}
+              "tools": [
+                {{- $firstTool := true }}
+                {{- range $tool := .body.tools }}
+                  {{- if eq $tool.type "function" }}
+                    {{- if not $firstTool }},{{ end }}
+                    {
+                      "name": "{{ $tool.function.name }}",
+                      "description": "{{ safeEncode $tool.function.description }}",
+                      "input_schema": {{ toJson $tool.function.parameters }}
+                    }
+                    {{- $firstTool = false }}
+                  {{- end }}
+                {{- end }}
+              ],
+              {{- end }}
+
+              {{- if .body.tool_choice }}
+              "tool_choice": {
+              {{- if eq (getType .body.tool_choice) "string" -}}
+                {{- if eq .body.tool_choice "auto" }}
+                  "type": "auto"
+                {{- else }}
+                  "type": "any"
+                {{- end }}
+              {{- else }}
+                "type": "tool",
+                "name": "{{ .body.tool_choice.function.name }}"
+              {{- end }}
+              },
+              {{- end }}
+
+              {{- if .body.temperature }}
+              "temperature": {{ .body.temperature }},
+              {{- end }}
+              {{- if .body.top_p }}
+              "top_p": {{ .body.top_p }},
+              {{- end }}
+
+              {{- if .body.stop }}
+                {{- if eq (getType .body.stop) "string" }}
+                  "stop_sequences": [ "{{ .body.stop }}" ]
+                {{- else if eq (getType .body.stop) "slice" }}
+                  "stop_sequences": {{ toJson .body.stop }}
+                {{- end }}
+              {{- end }}
+
+              "messages": [
+                {{- $firstMsg := true }}
+                {{- range $msg := .body.messages }}
+                  {{- if ne $msg.role "system" }}
+                    {{- if not $firstMsg }},{{ end }}
+                    {{- $firstMsg = false }}
+                    {
+                      "role": "{{ $msg.role }}",
+                      {{- if eq (getType $msg.content) "string" }}
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "{{ safeEncode $msg.content }}"
+                        }
+                      ]
+                      {{- else }}
+                      "content": [
+                        {{- $firstContentMsg := true }}
+                        {{- range $contentMsg := $msg.content }}
+                          {{- if not $firstContentMsg }},{{ end }}
+                          {{- $firstContentMsg = false }}
+                          {
+                            "type": "{{ $contentMsg.type }}",
+                            "{{ $contentMsg.type }}": "{{ safeEncode (index $contentMsg $contentMsg.type) }}"
+                          }
+                        {{- end }}
+                      ]
+                      {{- end }}
+                    }
+                  {{- end }}
+                {{- end }}
+              ]
+            }
+
+      response:
+        body:
+          template: |
+            {{- if .event }}
+              {
+                "object": "chat.completion.chunk",
+                "created": {{ timestamp }},
+                "service_tier": "scale",
+                "system_fingerprint": null,
+
+              {{- if eq .event.type "message_start" }}
+
+                {{ set "requestId" .event.message.id }}
+                {{ set "model" .event.message.model }}
+                {{ set "role" .event.message.role }}
+                {{ set "input_tokens" .event.message.usage.input_tokens }}
+                {{ set "output_tokens" .event.message.usage.output_tokens }}
+
+                "id": "{{ .event.message.id }}",
+                "model": "{{ .event.message.model }}",
+
+                "choices": [
+                  {
+                    "index": 0,
+                    "delta": {
+                      "role": "assistant",
+                      "content": ""
+                    },
+                    "logprobs": null,
+                    "finish_reason": null
+                  }
+                ],
+                "usage": null
+
+              {{- else if or (eq .event.type "content_block_start") (eq .event.type "content_block_stop") (eq .event.type "message_delta") }}
+
+                "id": "{{ get "requestId" }}",
+                "model": "{{ get "model" }}",
+
+                "choices": [
+                  {
+                    "index": 0,
+                    "delta": {
+                      "role": "assistant",
+                      "content": ""
+                    },
+                    "logprobs": null,
+                    "finish_reason": null
+                  }
+                ],
+                "usage": null
+
+              {{- else if eq .event.type "message_stop" }}
+
+                "id": "{{ get "requestId" }}",
+                "model": "{{ get "model" }}",
+
+                "choices": [],
+                "usage": {
+                  "prompt_tokens": {{ get "input_tokens" }},
+                  "completion_tokens": {{ get "output_tokens" }},
+                  "total_tokens": {{ sum (get "input_tokens") (get "output_tokens") }},
+                  "prompt_tokens_details": {
+                      "cached_tokens": 0,
+                      "audio_tokens": 0
+                  },
+                  "completion_tokens_details": {
+                      "reasoning_tokens": 0,
+                      "audio_tokens": 0,
+                      "accepted_prediction_tokens": 0,
+                      "rejected_prediction_tokens": 0
+                  }
+                }
+
+              {{- else }}
+
+                "id": "{{ get "requestId" }}",
+                "model": "{{ get "model" }}",
+
+                "choices": [
+                  {
+                    "index": 0,
+                    "delta": {
+                      "content": "{{ safeEncode .event.delta.text }}"
+                    },
+                    "logprobs": null,
+                    "finish_reason": null
+                  }
+                ],
+                "usage": null
+
+              {{- end }}
+              }
+            {{- end }}
