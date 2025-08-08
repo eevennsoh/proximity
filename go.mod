@@ -6,7 +6,6 @@ require (
 	github.com/alexflint/go-arg v1.5.1
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/go-chi/chi v4.1.2+incompatible
-	github.com/jinzhu/copier v0.4.0
 	gopkg.in/yaml.v3 v3.0.1
 )
 
