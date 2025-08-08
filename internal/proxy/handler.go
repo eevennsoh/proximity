@@ -11,8 +11,10 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"reflect"
+	"strconv"
 	"strings"
 	"text/template"
+	"time"
 
 	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
 
@@ -91,6 +93,8 @@ func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 
 			reader := bufio.NewReader(orig)
 
+			renderStorage := make(map[string]string)
+
 			for {
 				line, err := reader.ReadString('\n')
 				if err != nil {
@@ -103,7 +107,7 @@ func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 				}
 
 				// Modify the line as needed here
-				modifiedLine, err := processSseLine(line)
+				modifiedLine, err := s.processSseLine(line, cfg.Response.Body, renderStorage)
 				if err != nil {
 					log.Println(err)
 					break
@@ -123,10 +127,15 @@ func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 
 // processSseLine allows you to modify each SSE line as it comes through.
 // For now, it just logs and returns the line unmodified.
-func processSseLine(line string) (string, error) {
+func (s *server) processSseLine(line string, bodyOverride config.Body, renderStorage map[string]string) (string, error) {
 	newLine := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
 
-	if len(newLine) == 0 {
+	if newLine == "" {
+		return line, nil
+	}
+
+	// No overrides defined, return as is
+	if bodyOverride.Template == "" {
 		return line, nil
 	}
 
@@ -137,50 +146,23 @@ func processSseLine(line string) (string, error) {
 		return line, nil
 	}
 
-	_, ok := event["amazon-bedrock-invocationMetrics"]
-	if ok {
-		delete(event, "amazon-bedrock-invocationMetrics")
+	templateInput := map[string]any{
+		"event": event,
 	}
 
-	message, ok := event["message"]
-	if ok {
-		messageMap := message.(map[string]any)
-
-		usage, ok := messageMap["usage"]
-		if ok {
-			usageMap := usage.(map[string]any)
-
-			messageMap["usage"] = map[string]any{
-				"input_tokens":  usageMap["input_tokens"],
-				"output_tokens": usageMap["output_tokens"],
-			}
-		}
-	}
-
-	// if event["type"].(string) == "content_block_start" {
-	// 	contentBlockMap := event["content_block"].(map[string]any)
-	// 	contentBlockMap["text"] = "hello world"
-	// }
-
-	// val, ok := event["usage"]
-	// if ok {
-	// 	fmt.Println("GOING TO CHANGE LINE:", newLine)
-
-	// 	event["usage"] = map[string]string{
-	// 		"input_tokens":  val.(map[string]string)["input_tokens"],
-	// 		"output_tokens": val.(map[string]string)["output_tokens"],
-	// 	}
-	// }
-
-	bytes, err := json.Marshal(event)
+	renderedEventBytes, err := s.renderTemplateString(strings.TrimSpace(bodyOverride.Template), templateInput, renderStorage)
 	if err != nil {
 		return "", err
 	}
 
-	log.Println(string(bytes))
+	var buf bytes.Buffer
+
+	if err := json.Compact(&buf, renderedEventBytes); err != nil {
+		return "", err
+	}
 
 	// Rebuild the line and make sure to keep the formatting the same
-	return fmt.Sprintf("data: %s\n", bytes), nil
+	return fmt.Sprintf("data: %s\n", buf.String()), nil
 }
 
 func (s *server) modifyRequest(cfg *endpointProxyConfig, originalDirector func(*http.Request)) monifyRequestFn {
@@ -263,7 +245,7 @@ func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
 		log.Fatal(err)
 	}
 
-	bodyMap, err := extractJsonBody(reqCopy)
+	bodyMap, err := extractJsonBody(reqCopy.Headers, reqCopy.Body)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -326,18 +308,29 @@ func (s *server) getValueAtPath(data any, path string) (string, error) {
 	return strValue, nil
 }
 
-func (s *server) overrideBody(originalReq *http.Request, copiedReq *HttpRequest, body config.Body) error {
-	if body.Template != "" {
-		renderedBodyBytes, err := s.renderTemplateString(strings.TrimSpace(body.Template), copiedReq)
+func (s *server) overrideRequestBody(originalReq *http.Request, copiedReq *HttpRequest, bodyOverride config.Body) error {
+	if bodyOverride.Template != "" {
+		templateInput, err := s.buildTemplateInput(copiedReq.Headers, copiedReq.Body)
 		if err != nil {
 			return err
 		}
 
-		s.applyNewBodyToRequest(originalReq, renderedBodyBytes)
+		renderedBodyBytes, err := s.renderTemplateString(strings.TrimSpace(bodyOverride.Template), templateInput, nil)
+		if err != nil {
+			return err
+		}
+
+		var buf bytes.Buffer
+
+		if err := json.Compact(&buf, renderedBodyBytes); err != nil {
+			return err
+		}
+
+		s.applyNewBodyToRequest(originalReq, buf.Bytes())
 		return nil
 	}
 
-	if len(body.Patches) == 0 {
+	if len(bodyOverride.Patches) == 0 {
 		return nil
 	}
 
@@ -346,7 +339,7 @@ func (s *server) overrideBody(originalReq *http.Request, copiedReq *HttpRequest,
 		return err
 	}
 
-	newBody, err := s.applyPatchToJson(body.Patches, bodyBytes)
+	newBody, err := s.applyPatchToJson(bodyOverride.Patches, bodyBytes)
 	if err != nil {
 		return err
 	}
@@ -355,17 +348,41 @@ func (s *server) overrideBody(originalReq *http.Request, copiedReq *HttpRequest,
 	return nil
 }
 
-func (s *server) renderTemplateString(templateStr string, req *HttpRequest) ([]byte, error) {
-	jsonBody, err := extractJsonBody(req)
-	if err != nil {
-		return nil, err
-	}
+// func (s *server) overrideResponseBody(originalRes *http.Response, copiedRes *HttpResponse, bodyOverride config.Body) error {
+// 	if bodyOverride.Template != "" {
+// 		templateInput, err := s.buildTemplateInput(copiedRes.Headers, copiedRes.Body)
+// 		if err != nil {
+// 			return err
+// 		}
 
-	templateInput := map[string]any{
-		"body":    jsonBody,
-		"headers": req.Headers,
-	}
+// 		renderedBodyBytes, err := s.renderTemplateString(strings.TrimSpace(bodyOverride.Template), templateInput)
+// 		if err != nil {
+// 			return err
+// 		}
 
+// 		s.applyNewBodyToResponse(originalRes, renderedBodyBytes)
+// 		return nil
+// 	}
+
+// 	if len(bodyOverride.Patches) == 0 {
+// 		return nil
+// 	}
+
+// 	bodyBytes, err := io.ReadAll(originalRes.Body)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	newBody, err := s.applyPatchToJson(bodyOverride.Patches, bodyBytes)
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	s.applyNewBodyToResponse(originalRes, newBody)
+// 	return nil
+// }
+
+func (s *server) renderTemplateString(templateStr string, templateInput map[string]any, storage map[string]string) ([]byte, error) {
 	funcMap := template.FuncMap{
 		"toJson": func(v any) string {
 			b, err := json.Marshal(v)
@@ -389,10 +406,34 @@ func (s *server) renderTemplateString(templateStr string, req *HttpRequest) ([]b
 			safeString, _ = strings.CutSuffix(safeString, "\"")
 			return safeString
 		},
-		"normalizeModel": func(model, prefix, suffix string) string {
+		"trim": func(model, prefix, suffix string) string {
 			model = strings.TrimPrefix(model, prefix)
 			model = strings.TrimSuffix(model, suffix)
 			return prefix + model + suffix
+		},
+		"timestamp": func() string {
+			return fmt.Sprintf("%d", time.Now().Unix())
+		},
+		"set": func(key string, val any) string {
+			storage[key] = fmt.Sprintf("%v", val)
+			return ""
+		},
+		"get": func(key string) string {
+			return storage[key]
+		},
+		"sum": func(nums ...string) string {
+			total := 0
+
+			for _, numStr := range nums {
+				num, err := strconv.Atoi(numStr)
+				if err != nil {
+					log.Fatal(err)
+				}
+
+				total += num
+			}
+
+			return fmt.Sprintf("%d", total)
 		},
 	}
 
@@ -410,19 +451,33 @@ func (s *server) renderTemplateString(templateStr string, req *HttpRequest) ([]b
 	return buf.Bytes(), nil
 }
 
-// extractJsonBody extracts the JSON body from the request as a map[string]any.
-func extractJsonBody(req *HttpRequest) (map[string]any, error) {
-	if req.Headers.Get("Content-Type") == "" || req.Headers.Get("Content-Type") != "application/json" {
-		return nil, fmt.Errorf("content type is %s, expected application/json", req.Headers.Get("Content-Type"))
+func (s *server) buildTemplateInput(headers http.Header, body any) (map[string]any, error) {
+	jsonBody, err := extractJsonBody(headers, body)
+	if err != nil {
+		return nil, err
 	}
 
-	if req.Body == nil {
+	templateInput := map[string]any{
+		"body":    jsonBody,
+		"headers": headers,
+	}
+
+	return templateInput, nil
+}
+
+// extractJsonBody extracts the JSON body from the request/response as a map[string]any.
+func extractJsonBody(headers http.Header, body any) (map[string]any, error) {
+	if headers.Get("Content-Type") == "" || headers.Get("Content-Type") != "application/json" {
+		return nil, fmt.Errorf("content type is %s, expected application/json", headers.Get("Content-Type"))
+	}
+
+	if body == nil {
 		return map[string]any{}, nil
 	}
 
 	var bodyMap map[string]any
 
-	if err := json.Unmarshal(req.Body.([]byte), &bodyMap); err != nil {
+	if err := json.Unmarshal(body.([]byte), &bodyMap); err != nil {
 		return nil, err
 	}
 
@@ -456,3 +511,13 @@ func (s *server) applyNewBodyToRequest(req *http.Request, body []byte) {
 		return io.NopCloser(bytes.NewReader(body)), nil
 	}
 }
+
+// func (s *server) applyNewBodyToResponse(res *http.Response, body []byte) {
+// 	res.Body = io.NopCloser(bytes.NewReader(body))
+// 	res.ContentLength = int64(len(body))
+
+// 	if res.Header != nil {
+// 		res.Header.Set("Content-Length", fmt.Sprintf("%d", len(body)))
+// 		res.Header.Del("Transfer-Encoding")
+// 	}
+// }

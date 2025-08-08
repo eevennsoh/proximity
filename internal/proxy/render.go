@@ -31,8 +31,13 @@ func (s *server) renderRequest(originalRequest *http.Request, cfg *endpointProxy
 		return err
 	}
 
+	templateInput, err := s.buildTemplateInput(copiedRequest.Headers, copiedRequest.Body)
+	if err != nil {
+		return err
+	}
+
 	if cfg.Out != "" {
-		renderedPath, err := s.renderTemplateString(strings.TrimSpace(cfg.Out), copiedRequest)
+		renderedPath, err := s.renderTemplateString(strings.TrimSpace(cfg.Out), templateInput, nil)
 		if err != nil {
 			return err
 		}
@@ -48,7 +53,7 @@ func (s *server) renderRequest(originalRequest *http.Request, cfg *endpointProxy
 	}
 
 	// Apply body patches/overrides as per config
-	if err := s.overrideBody(originalRequest, copiedRequest, cfg.Request.Body); err != nil {
+	if err := s.overrideRequestBody(originalRequest, copiedRequest, cfg.Request.Body); err != nil {
 		return fmt.Errorf("error applying body override: %v", err)
 	}
 
@@ -127,7 +132,12 @@ func (s *server) overrideHeader(header config.Header, originalRequest *http.Requ
 	if header.Text != "" {
 		// Render the header value using the original request data to render
 		// the header value
-		renderedHeaderValueBytes, err := s.renderTemplateString(header.Text, copiedRequest)
+		templateInput, err := s.buildTemplateInput(copiedRequest.Headers, copiedRequest.Body)
+		if err != nil {
+			return err
+		}
+
+		renderedHeaderValueBytes, err := s.renderTemplateString(header.Text, templateInput, nil)
 		if err != nil {
 			return err
 		}
