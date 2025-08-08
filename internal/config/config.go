@@ -26,14 +26,18 @@ type UriMap struct {
 }
 
 type Overrides struct {
-	Global OverrideConfig            `yaml:"global"`
-	Uris   map[string]OverrideConfig `yaml:"uris"`
+	Global RequestResponse            `yaml:"global"`
+	Uris   map[string]RequestResponse `yaml:"uris"`
+}
+
+type RequestResponse struct {
+	Request  OverrideConfig `yaml:"request,omitempty"`
+	Response OverrideConfig `yaml:"response,omitempty"`
 }
 
 type OverrideConfig struct {
-	Headers  []Header `yaml:"headers"`
-	Body     Body     `yaml:"body"`
-	Response Response `yaml:"response"`
+	Headers []Header `yaml:"headers"`
+	Body    Body     `yaml:"body"`
 }
 
 type Header struct {
@@ -56,12 +60,8 @@ type ReqResponse struct {
 }
 
 type Body struct {
-	Json []Patch `yaml:"application/json"`
-	Text string  `yaml:"application/text"`
-}
-
-type Response struct {
-	Json []Patch `yaml:"application/json"`
+	Patches  []Patch `yaml:"patches"`
+	Template string  `yaml:"template"`
 }
 
 type Patch struct {
