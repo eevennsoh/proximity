@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"log"
+	"os"
+	"strings"
 	"sync"
 
 	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
@@ -24,12 +27,14 @@ type App struct {
 
 	proxy  proxy.Interface
 	config string
+	port   int
 }
 
 // NewApp creates a new App application struct
-func NewApp(config string) *App {
+func NewApp(config string, port int) *App {
 	return &App{
 		config: config,
+		port:   port,
 	}
 }
 
@@ -40,7 +45,7 @@ func (a *App) Startup(ctx context.Context) {
 }
 
 // StartProxy builds (if needed) and starts the proxy as a subprocess
-func (a *App) StartProxy(configPath string, port int) error {
+func (a *App) StartProxy() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -60,7 +65,7 @@ func (a *App) StartProxy(configPath string, port int) error {
 	logger := log.New(pw, "", log.LstdFlags)
 
 	a.proxy = proxy.New(cfg, proxy.Options{
-		Port:     port,
+		Port:     a.port,
 		TestMode: false,
 		Logger:   logger,
 	})
@@ -112,6 +117,55 @@ func (a *App) ClearLogs() {
 	defer a.mu.Unlock()
 	a.logs.Reset()
 	wruntime.EventsEmit(a.ctx, "proxy:log:cleared")
+}
+
+// Endpoints structures returned to the frontend
+type Endpoint struct {
+	In  string `json:"in"`
+	Out string `json:"out"`
+}
+
+type EndpointsResponse struct {
+	BaseEndpoint string     `json:"baseEndpoint"`
+	Endpoints    []Endpoint `json:"endpoints"`
+}
+
+// GetEndpoints returns the configured base endpoint and supported URI mappings.
+// It prefers the embedded/base64 config if available; otherwise falls back to reading config.yaml from disk.
+func (a *App) GetEndpoints() (*EndpointsResponse, error) {
+	var cfg *config.Config
+	var err error
+
+	if strings.TrimSpace(a.config) != "" {
+		cfg, err = config.ReadConfig(a.config)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		data, readErr := os.ReadFile("config.yaml")
+		if readErr != nil {
+			return nil, readErr
+		}
+		b64 := base64.StdEncoding.EncodeToString(data)
+		cfg, err = config.ReadConfig(b64)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	eps := make([]Endpoint, 0, len(cfg.SupportedUris))
+	for _, um := range cfg.SupportedUris {
+		eps = append(eps, Endpoint{In: um.In, Out: um.Out})
+	}
+
+	return &EndpointsResponse{
+		BaseEndpoint: cfg.BaseEndpoint,
+		Endpoints:    eps,
+	}, nil
+}
+
+func (a *App) GetPort() int {
+	return a.port
 }
 
 func (a *App) pipeLogs(r io.Reader) {

@@ -6,6 +6,10 @@ export function ClearLogs() {
   return window['go']['app']['App']['ClearLogs']();
 }
 
+export function GetEndpoints() {
+  return window['go']['app']['App']['GetEndpoints']();
+}
+
 export function GetLogs() {
   return window['go']['app']['App']['GetLogs']();
 }
@@ -14,8 +18,8 @@ export function IsRunning() {
   return window['go']['app']['App']['IsRunning']();
 }
 
-export function StartProxy(arg1, arg2) {
-  return window['go']['app']['App']['StartProxy'](arg1, arg2);
+export function StartProxy() {
+  return window['go']['app']['App']['StartProxy']();
 }
 
 export function StopProxy() {

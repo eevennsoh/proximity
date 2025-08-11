@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Load Nunito (bundled) */
+@font-face {
+  font-family: "Nunito";
+  src: url("./assets/fonts/nunito-v16-latin-regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* App base styles */
 :root {
   color-scheme: dark;
@@ -16,9 +25,15 @@ html, body, #root {
 body {
   @apply bg-slate-950 text-slate-50 antialiased;
   overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 }
 
-/* Smooth scroll for log view */
+/* Text selection color */
+::selection {
+  background-color: rgba(148, 163, 184, 0.25);
+}
+
+/* Smooth scroll for potential scroll areas */
 .scroll-smooth {
   scroll-behavior: smooth;
 }
@@ -30,4 +45,43 @@ body {
 }
 .app-no-drag {
   -webkit-app-region: no-drag;
+}
+
+/* Subtle grid/scanline for logs surface */
+.log-surface {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+  background-size: 24px 24px, 24px 24px;
+  background-position: 0 0, 0 0;
+}
+
+/* Optional shimmering highlight utility (used for decorative accents) */
+.shimmer-line {
+  position: relative;
+  overflow: hidden;
+}
+.shimmer-line::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.07), transparent);
+  animation: shimmer 2.2s linear infinite;
+}
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* Remove number input spinners (Chrome/Safari/Edge) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+/* Remove number input spinners (Firefox + generic) */
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
