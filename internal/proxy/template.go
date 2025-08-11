@@ -92,7 +92,7 @@ func (t *Template) functionsWithStorage(temporaryStorage map[string]string) temp
 				return token
 			}
 
-			t.logger.Println("request slauth token")
+			t.logger.Println("requesting slauth token")
 
 			token, err := t.requestSlauthToken(strings.Split(groups, ","), audience, environment)
 			if err != nil {
