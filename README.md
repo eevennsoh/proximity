@@ -5,11 +5,17 @@ This is a small configurable proxy with the aim of being able to compile it to p
 
 Ai-Gateway REST documentation: https://developer.atlassian.com/platform/ai-gateway/rest/
 
-To run the proxy, download the app from statlas:
+To run the proxy, just download the app:
+
+[Download](https://statlas.prod.atl-paas.net/vportella/proximity/proximity-arm64-latest.tar.gz)
+
+Then unpack the it and run this in your terminal:
 
 ```shell
-atlas statlas get -n vportella -s proximity/proximity-arm64-0.0.1.tar.gz > proximity.tar.gz
+xattr -d com.apple.quarantine ~/Downloads/Proximity.app
 ```
+
+You can now run the proxy!
 
 ## Routes available
 

@@ -1,5 +1,5 @@
 
-VERSION = 0.0.1
+VERSION = 0.0.2
 ENVVAR ?= CGO_ENABLED=0
 
 # ARCH=$(if $(TARGETPLATFORM),$(lastword $(subst /, ,$(TARGETPLATFORM))),amd64)
@@ -35,6 +35,16 @@ upload:
 		-f proximity-$(ARCH)-$(VERSION).tar.gz \
 		--auth-group eng-compute-orchestration-kitt \
 		-s proximity/
+
+	mv proximity-$(ARCH)-$(VERSION).tar.gz proximity-$(ARCH)-latest.tar.gz
+
+	atlas statlas put \
+		-n vportella \
+		-f proximity-$(ARCH)-latest.tar.gz \
+		--auth-group eng-compute-orchestration-kitt \
+		-s proximity/
+
+	rm proximity-$(ARCH)-latest.tar.gz
 
 # test:
 # 	go test -cover ./pkg/...
