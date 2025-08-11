@@ -47,7 +47,7 @@ func (s *server) RunServer(ctx context.Context) {
 
 	// TODO: REPLACE THIS, THIS IS TEMPORARY
 	s.router.Get("/openai/v1/models", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("{\"object\": \"list\",\"data\": [{\"id\": \"gpt-4.1-2025-04-14\",\"object\": \"model\",\"created\": 1686935002,\"owned_by\": \"atlassian\"}]}"))
+		w.Write([]byte("{\"object\": \"list\",\"data\": [{\"id\": \"gpt-5-2025-08-07\",\"object\": \"model\",\"created\": 1686935002,\"owned_by\": \"atlassian\"}]}"))
 	})
 
 	s.router.Get("/*", func(w http.ResponseWriter, r *http.Request) {
