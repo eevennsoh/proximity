@@ -17,7 +17,6 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 )
 
-type monifyRequestFn func(*http.Request)
 type modifyResponseFn func(*http.Response) error
 
 type endpointProxyConfig struct {
@@ -27,48 +26,6 @@ type endpointProxyConfig struct {
 	config.RequestResponse
 }
 
-func (s *server) logRequest(req *http.Request) {
-	bodyBytes, err := io.ReadAll(req.Body)
-	if err != nil {
-		s.Logger.Fatal(err)
-	}
-
-	req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-
-	reqCopy, err := copyRequest(req)
-	if err != nil {
-		s.Logger.Fatal(err)
-	}
-
-	reqBytes, err := json.Marshal(reqCopy)
-	if err != nil {
-		s.Logger.Fatal(err)
-	}
-
-	s.Logger.Println("REQUEST:", string(reqBytes))
-}
-
-func (s *server) logResponse(res *http.Response) {
-	bodyBytes, err := io.ReadAll(res.Body)
-	if err != nil {
-		s.Logger.Fatal(err)
-	}
-
-	res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-
-	resCopy, err := copyResponse(res)
-	if err != nil {
-		s.Logger.Fatal(err)
-	}
-
-	reqBytes, err := json.Marshal(resCopy)
-	if err != nil {
-		s.Logger.Fatal(err)
-	}
-
-	s.Logger.Println("RESPONSE:", string(reqBytes))
-}
-
 func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 	return func(res *http.Response) error {
 		contentType := res.Header.Get("Content-Type")
@@ -76,7 +33,6 @@ func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 		// If we're not getting a stream back then just log out the response
 		// and stop there.
 		if !strings.HasPrefix(contentType, "text/event-stream") {
-			s.logResponse(res)
 			return nil
 		}
 
@@ -161,47 +117,6 @@ func (s *server) processSseLine(line string, bodyOverride config.Body, renderSto
 	return fmt.Sprintf("data: %s\n", buf.String()), nil
 }
 
-func (s *server) modifyRequest(cfg *endpointProxyConfig, originalDirector func(*http.Request)) monifyRequestFn {
-	return func(req *http.Request) {
-		originalDirector(req)
-		s.logRequest(req)
-
-		// // Make a deep copy of the request for safe rendering and extraction
-		// originalRequest := copyRequest(req)
-
-		// if cfg.Out != "" {
-		// 	renderedPath := renderOutURI(cfg.Out, originalRequest)
-		// 	req.URL.Path = renderedPath
-		// 	req.RequestURI = renderedPath
-		// }
-
-		// // Render headers as they would be after patching
-		// renderedHeaders := http.Header{}
-		// for k, v := range req.Header {
-		// 	copied := make([]string, len(v))
-		// 	copy(copied, v)
-		// 	renderedHeaders[k] = copied
-		// }
-		// for _, header := range cfg.Headers {
-		// 	_ = s.overrideHeader(req, header, originalRequest)
-		// }
-
-		// // Render body as it would be after patching
-		// var renderedBody any
-		// if req.Body != nil && req.Header.Get("Content-Type") == "application/json" {
-		// 	bodyBytes, _ := io.ReadAll(req.Body)
-		// 	_ = json.Unmarshal(bodyBytes, &renderedBody)
-		// 	req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
-		// }
-
-		// s.Logger.Println(req.Method, req.RequestURI, req.Header.Get("User-Agent"))
-
-		// if err := s.overrideBody(req, cfg.Body); err != nil {
-		// 	s.Logger.Fatal(err)
-		// }
-	}
-}
-
 // An endpoint proxy handles proxying a single URI
 // The config will have been generated for it be combining the global and uri override configs together
 // There is a generic function for an endpoint proxy which takes in config to work
@@ -229,7 +144,7 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 func (s *server) endpointProxy(cfg *endpointProxyConfig) *httputil.ReverseProxy {
 	proxy := httputil.NewSingleHostReverseProxy(cfg.baseEndpoint)
 
-	proxy.Director = s.modifyRequest(cfg, proxy.Director)
+	// proxy.Director = s.modifyRequest(cfg, proxy.Director)
 	proxy.ModifyResponse = s.modifyResponse(cfg)
 
 	return proxy
