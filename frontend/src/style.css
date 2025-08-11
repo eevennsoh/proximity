@@ -1,0 +1,33 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* App base styles */
+:root {
+  color-scheme: dark;
+}
+
+html, body, #root {
+  height: 100vh;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  @apply bg-slate-950 text-slate-50 antialiased;
+  overflow: hidden;
+}
+
+/* Smooth scroll for log view */
+.scroll-smooth {
+  scroll-behavior: smooth;
+}
+
+/* Draggable regions for macOS titlebar overlay */
+.app-drag {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}

@@ -1,4 +1,8 @@
 
 vendor/
-bin/
-config.yaml
+config-dev.yaml
+proximity-*.tar.gz
+
+build/bin
+node_modules
+frontend/dist

@@ -1,0 +1,22 @@
+{
+  "$schema": "https://wails.io/schemas/config.v2.json",
+  "name": "Proximity",
+  "outputfilename": "proximity",
+  "frontend:install": "npm install",
+  "frontend:build": "npm run build",
+  "frontend:dev:watcher": "npm run dev",
+  "frontend:dev:serverUrl": "auto",
+  "author": {
+    "name": "vportella",
+    "email": "vportella@atlassian.com"
+  },
+  "info": {
+    "productName": "Proximity",
+    "companyName": "vportella"
+  },
+  "mac": {
+    "icon": "build/appicon.png",
+    "bundleID": "com.vportella.proximity",
+    "category": "public.app-category.developer-tools"
+  }
+}

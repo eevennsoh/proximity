@@ -6,15 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
-	"reflect"
-	"strconv"
 	"strings"
 	"text/template"
-	"time"
 
 	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
 
@@ -34,43 +30,43 @@ type endpointProxyConfig struct {
 func (s *server) logRequest(req *http.Request) {
 	bodyBytes, err := io.ReadAll(req.Body)
 	if err != nil {
-		log.Fatal(err)
+		s.Logger.Fatal(err)
 	}
 
 	req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 	reqCopy, err := copyRequest(req)
 	if err != nil {
-		log.Fatal(err)
+		s.Logger.Fatal(err)
 	}
 
 	reqBytes, err := json.Marshal(reqCopy)
 	if err != nil {
-		log.Fatal(err)
+		s.Logger.Fatal(err)
 	}
 
-	log.Println("REQUEST:", string(reqBytes))
+	s.Logger.Println("REQUEST:", string(reqBytes))
 }
 
 func (s *server) logResponse(res *http.Response) {
 	bodyBytes, err := io.ReadAll(res.Body)
 	if err != nil {
-		log.Fatal(err)
+		s.Logger.Fatal(err)
 	}
 
 	res.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
 
 	resCopy, err := copyResponse(res)
 	if err != nil {
-		log.Fatal(err)
+		s.Logger.Fatal(err)
 	}
 
 	reqBytes, err := json.Marshal(resCopy)
 	if err != nil {
-		log.Fatal(err)
+		s.Logger.Fatal(err)
 	}
 
-	log.Println("RESPONSE:", string(reqBytes))
+	s.Logger.Println("RESPONSE:", string(reqBytes))
 }
 
 func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
@@ -98,7 +94,7 @@ func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 			for {
 				line, err := reader.ReadString('\n')
 				if err != nil {
-					log.Println(err)
+					s.Logger.Println(err)
 					break
 				}
 
@@ -109,12 +105,12 @@ func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 				// Modify the line as needed here
 				modifiedLine, err := s.processSseLine(line, cfg.Response.Body, renderStorage)
 				if err != nil {
-					log.Println(err)
+					s.Logger.Println(err)
 					break
 				}
 
 				if _, err := pw.Write([]byte(modifiedLine)); err != nil {
-					log.Println(err)
+					s.Logger.Println(err)
 					break
 				}
 			}
@@ -142,7 +138,7 @@ func (s *server) processSseLine(line string, bodyOverride config.Body, renderSto
 	var event map[string]any
 
 	if err := json.Unmarshal([]byte(newLine), &event); err != nil {
-		log.Println("warning: could not unmarshal SSE event:", err)
+		s.Logger.Println("warning: could not unmarshal SSE event:", err)
 		return line, nil
 	}
 
@@ -198,10 +194,10 @@ func (s *server) modifyRequest(cfg *endpointProxyConfig, originalDirector func(*
 		// 	req.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 		// }
 
-		// log.Println(req.Method, req.RequestURI, req.Header.Get("User-Agent"))
+		// s.Logger.Println(req.Method, req.RequestURI, req.Header.Get("User-Agent"))
 
 		// if err := s.overrideBody(req, cfg.Body); err != nil {
-		// 	log.Fatal(err)
+		// 	s.Logger.Fatal(err)
 		// }
 	}
 }
@@ -213,12 +209,12 @@ func (s *server) modifyRequest(cfg *endpointProxyConfig, originalDirector func(*
 
 func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		log.Println(r.Method, r.RequestURI, r.Header.Get("User-Agent"))
+		s.Logger.Println(r.Method, r.RequestURI, r.Header.Get("User-Agent"))
 
 		proxyHandler := s.endpointProxy(cfg)
 
 		if err := s.renderRequest(r, cfg); err != nil {
-			log.Fatal(err)
+			s.Logger.Fatal(err)
 		}
 
 		if s.TestMode {
@@ -242,12 +238,12 @@ func (s *server) endpointProxy(cfg *endpointProxyConfig) *httputil.ReverseProxy 
 func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
 	reqCopy, err := copyRequest(r)
 	if err != nil {
-		log.Fatal(err)
+		s.Logger.Fatal(err)
 	}
 
 	bodyMap, err := extractJsonBody(reqCopy.Headers, reqCopy.Body)
 	if err != nil {
-		log.Fatal(err)
+		s.Logger.Fatal(err)
 	}
 
 	reqCopy.Body = bodyMap
@@ -256,7 +252,7 @@ func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
 
 	pretty, err := json.MarshalIndent(reqCopy, "", "  ")
 	if err != nil {
-		log.Fatal(err)
+		s.Logger.Fatal(err)
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -383,61 +379,7 @@ func (s *server) overrideRequestBody(originalReq *http.Request, copiedReq *HttpR
 // }
 
 func (s *server) renderTemplateString(templateStr string, templateInput map[string]any, storage map[string]string) ([]byte, error) {
-	funcMap := template.FuncMap{
-		"toJson": func(v any) string {
-			b, err := json.Marshal(v)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			return string(b)
-		},
-		"getType": func(v any) string {
-			return reflect.TypeOf(v).Kind().String()
-		},
-		"safeEncode": func(v any) string {
-			jsonBytes, err := json.Marshal(v)
-			if err != nil {
-				log.Fatal(err)
-			}
-
-			safeString := string(jsonBytes)
-			safeString, _ = strings.CutPrefix(safeString, "\"")
-			safeString, _ = strings.CutSuffix(safeString, "\"")
-			return safeString
-		},
-		"trim": func(model, prefix, suffix string) string {
-			model = strings.TrimPrefix(model, prefix)
-			model = strings.TrimSuffix(model, suffix)
-			return prefix + model + suffix
-		},
-		"timestamp": func() string {
-			return fmt.Sprintf("%d", time.Now().Unix())
-		},
-		"set": func(key string, val any) string {
-			storage[key] = fmt.Sprintf("%v", val)
-			return ""
-		},
-		"get": func(key string) string {
-			return storage[key]
-		},
-		"sum": func(nums ...string) string {
-			total := 0
-
-			for _, numStr := range nums {
-				num, err := strconv.Atoi(numStr)
-				if err != nil {
-					log.Fatal(err)
-				}
-
-				total += num
-			}
-
-			return fmt.Sprintf("%d", total)
-		},
-	}
-
-	tmpl, err := template.New("body").Funcs(funcMap).Parse(templateStr)
+	tmpl, err := template.New("body").Funcs(s.template.functionsWithStorage(storage)).Parse(templateStr)
 	if err != nil {
 		return nil, err
 	}
