@@ -32,9 +32,19 @@ function Badge({ children, variant = "success" }) {
 
 const describeEndpoint = (p) => {
   if (!p) return "Proxied endpoint.";
-  if (p.includes("/openai/") && p.includes("chat/completions")) return "OpenAI Chat Completions-compatible endpoint.";
-  if (p.includes("/bedrock/claude/") && p.includes("/messages")) return "Anthropic Claude Messages on AWS Bedrock.";
-  if (p.includes("/provider/bedrock/format/openai") && p.includes("chat/completions")) return "Translates OpenAI Chat Completions format to Bedrock/Anthropic.";
+
+  if (p == "/openai/v1/chat/completions") {
+    return "OpenAI API";
+  }
+
+  if (p == "/bedrock/claude/v1/messages") {
+    return "Anthropic Claude API";
+  }
+
+  if (p == "/provider/bedrock/format/openai/v1/chat/completions") {
+    return "Anthropic Claude API translated to OpenAI compatible API";
+  }
+
   return "Proxied endpoint.";
 };
 
@@ -44,6 +54,7 @@ export default function App() {
   const [logs, setLogs] = useState("");
   const [busy, setBusy] = useState(false);
   const [endpoints, setEndpoints] = useState([]);
+  const [activeTab, setActiveTab] = useState("routes");
 
   // Dark theme only
   const logsRef = useRef(null);
@@ -137,20 +148,32 @@ export default function App() {
     await API.ClearLogs();
   };
 
-  const refreshEndpoints = async () => {
-    if (!API?.GetEndpoints) return;
-    try {
-      const info = await API.GetEndpoints();
-      setEndpoints(info?.endpoints || []);
-    } catch (e) {}
-  };
 
 
   return (
     <div className="h-screen overflow-hidden select-none bg-slate-900 text-slate-100 relative flex flex-col">
       <div className="fixed top-0 left-0 right-0 h-2 app-drag z-10" />
       <header className="px-3 py-3 border-b border-neutral-700 bg-neutral-900/60 backdrop-blur">
-        <div className="w-full flex items-center justify-between app-no-drag">
+        <div className="relative w-full flex items-center justify-between app-no-drag">
+          <div className="absolute left-1/2 -translate-x-1/2">
+            <div className="relative inline-flex rounded-md border border-neutral-700 bg-neutral-800/60 p-0.5 overflow-hidden">
+              <span
+                className={`pointer-events-none absolute top-0.5 left-0.5 bottom-0.5 w-24 rounded bg-neutral-700 transform-gpu transition-transform duration-100 ease-in-out ${activeTab === "logs" ? "translate-x-24" : "translate-x-0"}`}
+              />
+              <button
+                onClick={() => setActiveTab("routes")}
+                className={`relative z-10 w-24 text-center px-3 py-1.5 text-sm rounded ${activeTab === "routes" ? "text-slate-100" : "text-slate-300 hover:text-slate-100"}`}
+              >
+                Routes
+              </button>
+              <button
+                onClick={() => setActiveTab("logs")}
+                className={`relative z-10 w-24 text-center px-3 py-1.5 text-sm rounded ${activeTab === "logs" ? "text-slate-100" : "text-slate-300 hover:text-slate-100"}`}
+              >
+                Logs
+              </button>
+            </div>
+          </div>
           <div className="flex items-center gap-3">
             <div className="h-9 w-9 rounded-lg bg-neutral-800/60 ring-1 ring-neutral-700 grid place-items-center">
               <Sparkles className="h-5 w-5 text-slate-300" />
@@ -160,13 +183,13 @@ export default function App() {
                 Proximity
               </h1>
               <p className="text-xs text-slate-400">
-                Enterprise AI APIs via AI-Gateway.
+                Enterprise AI APIs via AI-Gateway
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
             {port != null && (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ring-inset bg-neutral-900 text-slate-300 ring-neutral-800 select-text cursor-text">{`listening on port ${port}`}</span>
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ring-inset bg-neutral-900 text-slate-300 ring-neutral-800 select-text cursor-text">{`Listening on port ${port}`}</span>
             )}
             {!running ? (
               <button
@@ -190,69 +213,46 @@ export default function App() {
       </header>
 
       <main className="p-3 flex-1 overflow-hidden min-h-0 min-w-0">
-        <div className="w-full grid h-full min-h-0 min-w-0 overflow-hidden gap-3 md:grid-cols-[280px_minmax(0,1fr)] max-w-6xl mx-auto">
-          {/* Control Panel */}
-          <section>
-            <div className="h-full min-h-0 flex flex-col rounded-lg border border-neutral-700 bg-neutral-800/60 p-4">
-              <h2 className="text-sm font-medium text-slate-200 mb-4">Configuration</h2>
-
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-medium text-slate-400">Exposed endpoints</h3>
-                  <button
-                    onClick={refreshEndpoints}
-                    className="text-xs text-slate-400 hover:text-slate-200"
-                  >
-                    Refresh
-                  </button>
-                </div>
-                <div className="rounded-md border border-neutral-700 bg-neutral-800 overflow-hidden">
-                  <div className="max-h-48 overflow-auto divide-y divide-neutral-700">
-                    {endpoints?.length ? (
-                      endpoints.map((e, i) => (
-                        <div key={i} className="px-3 py-2">
-                          <div className="flex items-center gap-2">
-                            <code className="font-mono text-[11px] text-slate-300 bg-neutral-900/70 border border-neutral-700 rounded px-2 py-1">
-                              {e.in}
-                            </code>
-                          </div>
-                          <div className="text-[11px] text-slate-400 mt-1">
-                            {describeEndpoint(e.in)}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="px-3 py-4 text-xs text-slate-500">No endpoints configured.</div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-auto pt-4"></div>
-
-            </div>
-          </section>
-
-          {/* Logs */}
-          <section className="md:col-start-2 min-h-0 min-w-0 h-full overflow-hidden">
-            <div className="rounded-lg border border-neutral-700 bg-neutral-800/60 p-0 divide-y divide-neutral-700 h-full min-h-0 min-w-0 w-full flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-3 py-3 bg-neutral-800 shrink-0">
-                <div className="text-sm font-semibold text-slate-300">Logs</div>
-                <button
-                  onClick={onClearLogs}
-                  className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 text-sm text-slate-200 transition"
-                >
-                  Clear logs
-                </button>
-              </div>
-              <div
-                ref={logsRef}
-                className="font-mono text-xs leading-relaxed text-slate-200/90 whitespace-pre-wrap break-all bg-neutral-900 p-3 overflow-auto flex-1 w-full min-w-0 min-h-0 max-h-full select-text"
+        <div className="rounded-lg border border-neutral-700 bg-neutral-800/60 p-0 divide-y divide-neutral-700 h-full min-h-0 min-w-0 w-full flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between p-3 h-12 bg-neutral-800 shrink-0">
+            <div className="text-sm font-semibold text-slate-300">{activeTab === "logs" ? "Logs" : "Routes"}</div>
+            {activeTab === "logs" && (
+              <button
+                onClick={onClearLogs}
+                className="inline-flex items-center rounded-md border border-neutral-700 bg-neutral-800 hover:bg-neutral-700 px-3 py-1.5 text-sm text-slate-200 transition"
               >
+                Clear logs
+              </button>
+            )}
+          </div>
+          <div ref={logsRef} className={`flex-1 min-h-0 min-w-0 overflow-auto p-3 ${activeTab === "logs" ? "bg-neutral-900" : ""}`}>
+            {activeTab === "logs" ? (
+              <div className="font-mono text-xs leading-relaxed text-slate-200/90 whitespace-pre-wrap break-all w-full min-w-0 min-h-0 select-text">
                 {logs?.length ? logs : "No logs yet."}
               </div>
-            </div>
-          </section>
+            ) : (
+              <div>
+                {endpoints?.length ? (
+                  <div className="divide-y divide-neutral-800">
+                    {endpoints.map((e, i) => (
+                      <div key={i} className="py-3 px-2 rounded-md hover:bg-neutral-800">
+                        <div className="text-[15px] font-medium text-slate-200">
+                          {describeEndpoint(e.in)}
+                        </div>
+                        <div className="mt-1.5">
+                          <span className="inline-block font-mono text-sm text-slate-100 bg-neutral-900/70 ring-1 ring-neutral-800 rounded px-3 py-1.5 select-text">
+                            {e.in}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-sm text-slate-500">No endpoints configured.</div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </main>
 
