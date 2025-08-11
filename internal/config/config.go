@@ -77,8 +77,7 @@ func ReadConfig(configData string) (*Config, error) {
 	}
 
 	var cfg Config
-
-	if err := yaml.Unmarshal(decodedConfig, &cfg); err != nil {
+	if err := yaml.Unmarshal([]byte(decodedConfig), &cfg); err != nil {
 		return nil, err
 	}
 

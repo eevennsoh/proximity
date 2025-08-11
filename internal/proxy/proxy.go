@@ -3,7 +3,6 @@ package proxy
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 
@@ -18,6 +17,8 @@ type server struct {
 
 	router     *chi.Mux
 	httpServer *http.Server
+
+	template *Template
 }
 
 func New(cfg *config.Config, options Options) Interface {
@@ -33,11 +34,12 @@ func New(cfg *config.Config, options Options) Interface {
 		Config:     cfg,
 		router:     router,
 		httpServer: httpServer,
+		template:   newTemplate(options.Logger),
 	}
 }
 
 func (s *server) RunServer(ctx context.Context) {
-	log.Printf("starting http server on port %d", s.Options.Port)
+	s.Logger.Printf("starting http server on port %d", s.Options.Port)
 
 	s.router.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("OK"))
@@ -57,14 +59,14 @@ func (s *server) RunServer(ctx context.Context) {
 	for _, supportedUri := range s.SupportedUris {
 		endpointProxyCfg, err := s.buildEndpointProxyConfig(supportedUri)
 		if err != nil {
-			log.Fatal(err)
+			s.Logger.Fatal(err)
 		}
 
 		s.router.Handle(supportedUri.In, s.handleEndpoint(endpointProxyCfg))
 	}
 
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-		log.Fatal(err)
+		s.Logger.Fatal(err)
 	}
 }
 

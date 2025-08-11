@@ -1,8 +1,0 @@
-
-services:
-  central-ai-proxy:
-    container_name: central-ai-proxy
-    image: docker.atl-paas.net/vportella/central-ai-proxy:0.0.1
-    ports:
-      - "3001:3001"
-    restart: unless-stopped

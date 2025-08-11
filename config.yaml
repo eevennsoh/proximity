@@ -34,12 +34,7 @@ overrides:
           text: autofix-service-internal
         - op: add
           name: Authorization
-          request:
-            method: POST
-            url: http://localhost:21298/rest/token
-            jsonBody: '{"audience":"ai-gateway","environment":"staging","groups":["atlassian-all"]}'
-            response:
-              resultPath: /bearerToken
+          text: 'slauth {{ slauthtoken "atlassian-all" "ai-gateway" "staging" }}'
 
       response:
         headers: []
