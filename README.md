@@ -8,7 +8,7 @@ Ai-Gateway REST documentation: https://developer.atlassian.com/platform/ai-gatew
 To run the proxy, download the app from statlas:
 
 ```shell
-atlas statlas get -n vportella -s proximity/proximity-arm64-0.0.1.tar.gz
+atlas statlas get -n vportella -s proximity/proximity-arm64-0.0.1.tar.gz > proximity.tar.gz
 ```
 
 ## Routes available
