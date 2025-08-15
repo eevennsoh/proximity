@@ -56,6 +56,51 @@ const describeEndpoint = (p) => {
   return "Proxied endpoint.";
 };
 
+const getProviderColor = (provider) => {
+  switch (provider) {
+    case "OpenAI":
+      return {
+        container: "bg-emerald-950/60 border-emerald-800/80",
+        divide: "divide-emerald-800/80",
+      };
+    case "Anthropic":
+      return {
+        container: "bg-amber-950/60 border-amber-800/80",
+        divide: "divide-amber-800/80",
+      };
+    case "Google":
+      return {
+        container: "bg-sky-950/60 border-sky-800/80",
+        divide: "divide-sky-800/80",
+      };
+    default:
+      return {
+        container: "bg-neutral-800 border-neutral-700",
+        divide: "divide-neutral-700",
+      };
+  }
+};
+
+const getEndpointProvider = (path) => {
+  if (path.startsWith("/openai")) return "OpenAI";
+  if (path.startsWith("/bedrock")) return "Anthropic";
+  if (path.startsWith("/provider/bedrock")) return "Anthropic";
+  if (path.startsWith("/google")) return "Google";
+  return "Other";
+};
+
+const groupEndpoints = (endpoints) => {
+  if (!endpoints) return {};
+  return endpoints.reduce((acc, endpoint) => {
+    const provider = getEndpointProvider(endpoint.in);
+    if (!acc[provider]) {
+      acc[provider] = [];
+    }
+    acc[provider].push(endpoint);
+    return acc;
+  }, {});
+};
+
 export default function App() {
   const [port, setPort] = useState(null);
   const [running, setRunning] = useState(false);
@@ -241,22 +286,50 @@ export default function App() {
             ) : (
               <div>
                 {endpoints?.length ? (
-                  <div className="divide-y divide-neutral-800">
-                    {endpoints.map((e, i) => (
-                      <div key={i} className="py-3 px-2 rounded-md hover:bg-neutral-800">
-                        <div className="text-[15px] font-medium text-slate-200">
-                          {describeEndpoint(e.in)}
-                        </div>
-                        <div className="mt-1.5">
-                          <span className="inline-block font-mono text-sm text-slate-100 bg-neutral-900/70 ring-1 ring-neutral-800 rounded px-3 py-1.5 select-text">
-                            {e.in}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="space-y-4">
+                    {Object.entries(groupEndpoints(endpoints)).map(
+                      ([provider, providerEndpoints]) => {
+                        const colors = getProviderColor(provider);
+                        return (
+                          <div
+                            key={provider}
+                            className={`rounded-lg border ${colors.container}`}
+                          >
+                          <div
+                            className={`p-3 border-b ${
+                              colors.container.split(" ")[1]
+                            } bg-white/5`}
+                          >
+                            <h2 className="text-base font-semibold text-slate-200">
+                              {provider}
+                            </h2>
+                          </div>
+                            <div className={`divide-y ${colors.divide}`}>
+                              {providerEndpoints.map((e, i) => (
+                                <div
+                                  key={i}
+                                  className="p-3 hover:bg-white/5"
+                                >
+                                  <div className="text-[15px] font-medium text-slate-200">
+                                    {describeEndpoint(e.in)}
+                                  </div>
+                                  <div className="mt-1.5">
+                                    <span className="inline-block font-mono text-sm text-slate-100 bg-black/20 ring-1 ring-white/10 rounded px-3 py-1.5 select-text">
+                                      {e.in}
+                                    </span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      }
+                    )}
                   </div>
                 ) : (
-                  <div className="text-sm text-slate-500">No endpoints configured.</div>
+                  <div className="text-sm text-slate-500">
+                    No endpoints configured.
+                  </div>
                 )}
               </div>
             )}
