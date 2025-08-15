@@ -6,7 +6,7 @@ ENVVAR ?= CGO_ENABLED=0
 ARCH=arm64
 
 CONFIG = $(shell cat config.yaml | base64 | tr -d "\n")
-CONFIG_DEV = $(shell cat config.yaml | base64 | tr -d "\n")
+CONFIG_DEV = $(shell cat config-dev.yaml | base64 | tr -d "\n")
 
 BUILD_LD_FLAGS = -X 'main.Config=$(CONFIG)' -X 'main.Port=29576'
 BUILD_LD_FLAGS_DEV = -X 'main.Config=$(CONFIG_DEV)' -X 'main.Port=29575'
