@@ -116,16 +116,18 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [endpoints, setEndpoints] = useState([]);
   const [activeTab, setActiveTab] = useState("routes");
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState(
+    window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"
+  );
 
   // Dark theme only
   const logsRef = useRef(null);
 
   // Auto-scroll logs
   useEffect(() => {
-    if (!logsRef.current) return;
+    if (!logsRef.current || activeTab !== "logs") return;
     logsRef.current.scrollTop = logsRef.current.scrollHeight;
-  }, [logs]);
+  }, [logs, activeTab]);
 
   useEffect(() => {
     if (theme === "dark") {
@@ -134,6 +136,15 @@ export default function App() {
       document.documentElement.classList.remove("dark");
     }
   }, [theme]);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (e) => {
+      setTheme(e.matches ? "dark" : "light");
+    };
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
 
   // Initialisation: fetch defaults & status
   useEffect(() => {
@@ -223,9 +234,15 @@ export default function App() {
   return (
     <div className="h-screen overflow-hidden select-none bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 relative flex flex-col">
       <div className="fixed top-0 left-0 right-0 h-2 app-drag z-10" />
-      <header className="px-3 py-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-100/60 dark:bg-neutral-900/60 backdrop-blur">
+      <header
+        style={{ "--wails-draggable": "drag" }}
+        className="px-3 pb-2 pt-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-100/60 dark:bg-neutral-900/60 backdrop-blur h-20 flex items-end"
+      >
         <div className="relative w-full flex items-center justify-between app-no-drag">
-          <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2">
+          <div
+            style={{ "--wails-draggable": "no-drag" }}
+            className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2"
+          >
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
               className="h-9 w-9 grid place-items-center rounded-md bg-neutral-200/60 dark:bg-neutral-800/60 ring-1 ring-neutral-300 dark:ring-neutral-700 text-slate-500 dark:text-slate-300"
@@ -264,7 +281,10 @@ export default function App() {
               </button>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div
+            style={{ "--wails-draggable": "no-drag" }}
+            className="flex items-center gap-3"
+          >
             <div className="h-9 w-9 rounded-lg bg-neutral-200/60 dark:bg-neutral-800/60 ring-1 ring-neutral-300 dark:ring-neutral-700 grid place-items-center">
               <Sparkles className="h-5 w-5 text-slate-500 dark:text-slate-300" />
             </div>
@@ -277,7 +297,10 @@ export default function App() {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div
+            style={{ "--wails-draggable": "no-drag" }}
+            className="flex items-center gap-2"
+          >
             {port != null && (
               <span
                 className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ring-inset select-text cursor-text transition-all duration-150 bg-neutral-200/60 dark:bg-neutral-900 ${
