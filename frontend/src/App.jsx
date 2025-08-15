@@ -42,7 +42,15 @@ const describeEndpoint = (p) => {
   }
 
   if (p == "/provider/bedrock/format/openai/v1/chat/completions") {
-    return "Anthropic Claude API translated to OpenAI compatible API";
+    return "Anthropic Claude API translated to an OpenAI compatible API";
+  }
+
+  if (p == "/google/gemini/v1beta/models/{model}:generateContent") {
+    return "Gemini API";
+  }
+
+  if (p == "/google/gemini/v1beta/models/{model}:streamGenerateContent") {
+    return "Gemini streamed API";
   }
 
   return "Proxied endpoint.";

@@ -15,6 +15,7 @@ import (
 	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
+	"github.com/go-chi/chi"
 )
 
 type modifyResponseFn func(*http.Response) error
@@ -124,10 +125,6 @@ func (s *server) processSseLine(line string, bodyOverride config.Body, renderSto
 
 func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		s.Logger.Println(r.Method, r.RequestURI, r.Header.Get("User-Agent"))
-
-		proxyHandler := s.endpointProxy(cfg)
-
 		if err := s.renderRequest(r, cfg); err != nil {
 			s.Logger.Fatal(err)
 		}
@@ -137,14 +134,13 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 			return
 		}
 
+		proxyHandler := s.endpointProxy(cfg)
 		proxyHandler.ServeHTTP(w, r)
 	}
 }
 
 func (s *server) endpointProxy(cfg *endpointProxyConfig) *httputil.ReverseProxy {
 	proxy := httputil.NewSingleHostReverseProxy(cfg.baseEndpoint)
-
-	// proxy.Director = s.modifyRequest(cfg, proxy.Director)
 	proxy.ModifyResponse = s.modifyResponse(cfg)
 
 	return proxy
@@ -156,7 +152,7 @@ func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
 		s.Logger.Fatal(err)
 	}
 
-	bodyMap, err := extractJsonBody(reqCopy.Headers, reqCopy.Body)
+	bodyMap, err := extractJsonBody(&r.Header, &r.Body)
 	if err != nil {
 		s.Logger.Fatal(err)
 	}
@@ -219,13 +215,8 @@ func (s *server) getValueAtPath(data any, path string) (string, error) {
 	return strValue, nil
 }
 
-func (s *server) overrideRequestBody(originalReq *http.Request, copiedReq *HttpRequest, bodyOverride config.Body) error {
+func (s *server) overrideRequestBody(originalReq *http.Request, templateInput map[string]any, bodyOverride config.Body) error {
 	if bodyOverride.Template != "" {
-		templateInput, err := s.buildTemplateInput(copiedReq.Headers, copiedReq.Body)
-		if err != nil {
-			return err
-		}
-
 		renderedBodyBytes, err := s.renderTemplateString(strings.TrimSpace(bodyOverride.Template), templateInput, nil)
 		if err != nil {
 			return err
@@ -261,12 +252,12 @@ func (s *server) overrideRequestBody(originalReq *http.Request, copiedReq *HttpR
 
 // func (s *server) overrideResponseBody(originalRes *http.Response, copiedRes *HttpResponse, bodyOverride config.Body) error {
 // 	if bodyOverride.Template != "" {
-// 		templateInput, err := s.buildTemplateInput(copiedRes.Headers, copiedRes.Body)
+// 		templateInput, err := s.buildTemplateInput(&copiedRes.Headers, copiedRes.Body)
 // 		if err != nil {
 // 			return err
 // 		}
 
-// 		renderedBodyBytes, err := s.renderTemplateString(strings.TrimSpace(bodyOverride.Template), templateInput)
+// 		renderedBodyBytes, err := s.renderTemplateString(strings.TrimSpace(bodyOverride.Template), templateInput, nil)
 // 		if err != nil {
 // 			return err
 // 		}
@@ -308,33 +299,54 @@ func (s *server) renderTemplateString(templateStr string, templateInput map[stri
 	return buf.Bytes(), nil
 }
 
-func (s *server) buildTemplateInput(headers http.Header, body any) (map[string]any, error) {
-	jsonBody, err := extractJsonBody(headers, body)
+func (s *server) buildTemplateInputFromRequest(req *http.Request) (map[string]any, error) {
+	jsonBody, err := extractJsonBody(&req.Header, &req.Body)
 	if err != nil {
 		return nil, err
 	}
 
+	routeCtx := chi.RouteContext(req.Context())
+	pathParams := routeCtx.URLParams
+	pathParamsMap := make(map[string]string)
+
+	for i, key := range pathParams.Keys {
+		pathParamsMap[key] = pathParams.Values[i]
+	}
+
 	templateInput := map[string]any{
-		"body":    jsonBody,
-		"headers": headers,
+		"path":       req.URL.Path,
+		"pathParams": pathParamsMap,
+		"body":       jsonBody,
+		"headers":    copyHeaders(req.Header),
 	}
 
 	return templateInput, nil
 }
 
+func copyHeaders(original http.Header) http.Header {
+	copy := make(http.Header)
+
+	for key, values := range original {
+		copy[key] = append([]string(nil), values...)
+	}
+
+	return copy
+}
+
 // extractJsonBody extracts the JSON body from the request/response as a map[string]any.
-func extractJsonBody(headers http.Header, body any) (map[string]any, error) {
+func extractJsonBody(headers *http.Header, body *io.ReadCloser) (map[string]any, error) {
 	if headers.Get("Content-Type") == "" || headers.Get("Content-Type") != "application/json" {
 		return nil, fmt.Errorf("content type is %s, expected application/json", headers.Get("Content-Type"))
 	}
 
-	if body == nil {
-		return map[string]any{}, nil
+	bodyBytes, err := copyBody(body)
+	if err != nil {
+		return nil, err
 	}
 
 	var bodyMap map[string]any
 
-	if err := json.Unmarshal(body.([]byte), &bodyMap); err != nil {
+	if err := json.Unmarshal(bodyBytes, &bodyMap); err != nil {
 		return nil, err
 	}
 

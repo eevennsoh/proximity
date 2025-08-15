@@ -41,19 +41,12 @@ func New(cfg *config.Config, options Options) Interface {
 func (s *server) RunServer(ctx context.Context) {
 	s.Logger.Printf("starting http server on port %d", s.Options.Port)
 
-	s.router.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("OK"))
-	})
-
-	// TODO: REPLACE THIS, THIS IS TEMPORARY
-	s.router.Get("/openai/v1/models", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("{\"object\": \"list\",\"data\": [{\"id\": \"gpt-5-2025-08-07\",\"object\": \"model\",\"created\": 1686935002,\"owned_by\": \"atlassian\"}]}"))
-	})
-
-	s.router.Get("/*", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("Not found:", r.URL)
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("Not Found"))
+	// Log out all requests coming in
+	s.router.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			s.Logger.Println(r.Method, r.URL.Path, r.Header.Get("User-Agent"))
+			next.ServeHTTP(w, r)
+		})
 	})
 
 	for _, supportedUri := range s.SupportedUris {

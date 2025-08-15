@@ -2,8 +2,13 @@
 baseEndpoint: https://ai-gateway.us-east-1.staging.atl-paas.net
 
 supportedUris:
+
+  # ******* OPENAI ******* #
+
   - in: /openai/v1/chat/completions
     out: /v1/openai/v1/chat/completions
+
+  # ******* CLAUDE ******* #
 
   - in: /bedrock/claude/v1/messages
     out: |
@@ -12,6 +17,14 @@ supportedUris:
   - in: /provider/bedrock/format/openai/v1/chat/completions
     out: |
       /v1/bedrock/model/{{ trim .body.model "anthropic." "-v1:0" }}/invoke{{- if eq (index .body.stream) true -}}-with-response-stream{{- end -}}
+
+  # ******* GEMINI ******* #
+
+  - in: /google/gemini/v1beta/models/{model}:generateContent
+    out: /v1/google/v1/publishers/google/models/{{ .pathParams.model }}:generateContent
+
+  - in: /google/gemini/v1beta/models/{model}:streamGenerateContent
+    out: /v1/google/v1/publishers/google/models/{{ .pathParams.model }}:streamGenerateContent
 
 overrides:
   global:

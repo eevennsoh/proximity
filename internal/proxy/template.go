@@ -54,10 +54,10 @@ func (t *Template) functionsWithStorage(temporaryStorage map[string]string) temp
 			safeString, _ = strings.CutSuffix(safeString, "\"")
 			return safeString
 		},
-		"trim": func(model, prefix, suffix string) string {
-			model = strings.TrimPrefix(model, prefix)
-			model = strings.TrimSuffix(model, suffix)
-			return prefix + model + suffix
+		"trim": func(str, prefix, suffix string) string {
+			str = strings.TrimPrefix(str, prefix)
+			str = strings.TrimSuffix(str, suffix)
+			return prefix + str + suffix
 		},
 		"timestamp": func() string {
 			return fmt.Sprintf("%d", time.Now().Unix())
