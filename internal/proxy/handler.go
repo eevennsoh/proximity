@@ -125,13 +125,24 @@ func (s *server) processSseLine(line string, bodyOverride config.Body, renderSto
 
 func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if err := s.renderRequest(r, cfg); err != nil {
+		// Build the template variable map to use the render everything
+		templateInput, err := s.buildTemplateInputFromRequest(r)
+		if err != nil {
 			s.Logger.Fatal(err)
+		}
+
+		if cfg.Out == "" {
+			s.serveHeadlessResponse(w, r, cfg, templateInput)
+			return
 		}
 
 		if s.TestMode {
 			s.serveRenderedRequest(w, r)
 			return
+		}
+
+		if err := s.renderRequest(r, cfg, templateInput); err != nil {
+			s.Logger.Fatal(err)
 		}
 
 		proxyHandler := s.endpointProxy(cfg)
@@ -168,6 +179,42 @@ func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintln(w, string(pretty))
+}
+
+func (s *server) serveHeadlessResponse(w http.ResponseWriter, r *http.Request, cfg *endpointProxyConfig, templateInput map[string]any) {
+	// Create a base http.Response which can be rendered and then used to respond to the request
+	res := &http.Response{
+		StatusCode: http.StatusOK,
+		Status:     http.StatusText(http.StatusOK),
+		Proto:      r.Proto,
+		ProtoMajor: r.ProtoMajor,
+		ProtoMinor: r.ProtoMinor,
+		Header:     make(http.Header),
+	}
+
+	if err := s.renderResponse(res, cfg, templateInput); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, err.Error())
+		return
+	}
+
+	body, err := copyBody(&res.Body)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		fmt.Fprintln(w, err.Error())
+		return
+	}
+
+	// Copy headers from the rendered response to the ResponseWriter
+	for key, values := range res.Header {
+		for _, value := range values {
+			w.Header().Set(key, value)
+		}
+	}
+
+	// Now, write the status code and body
+	w.WriteHeader(res.StatusCode)
+	w.Write(body)
 }
 
 func (s *server) makeRequest(request config.Request) ([]byte, error) {
@@ -215,7 +262,7 @@ func (s *server) getValueAtPath(data any, path string) (string, error) {
 	return strValue, nil
 }
 
-func (s *server) overrideRequestBody(originalReq *http.Request, templateInput map[string]any, bodyOverride config.Body) error {
+func (s *server) overrideRequestBody(req *http.Request, templateInput map[string]any, bodyOverride config.Body) error {
 	if bodyOverride.Template != "" {
 		renderedBodyBytes, err := s.renderTemplateString(strings.TrimSpace(bodyOverride.Template), templateInput, nil)
 		if err != nil {
@@ -228,7 +275,7 @@ func (s *server) overrideRequestBody(originalReq *http.Request, templateInput ma
 			return err
 		}
 
-		s.applyNewBodyToRequest(originalReq, buf.Bytes())
+		s.applyNewBodyToRequest(req, buf.Bytes())
 		return nil
 	}
 
@@ -236,7 +283,7 @@ func (s *server) overrideRequestBody(originalReq *http.Request, templateInput ma
 		return nil
 	}
 
-	bodyBytes, err := io.ReadAll(originalReq.Body)
+	bodyBytes, err := io.ReadAll(req.Body)
 	if err != nil {
 		return err
 	}
@@ -246,43 +293,44 @@ func (s *server) overrideRequestBody(originalReq *http.Request, templateInput ma
 		return err
 	}
 
-	s.applyNewBodyToRequest(originalReq, newBody)
+	s.applyNewBodyToRequest(req, newBody)
 	return nil
 }
 
-// func (s *server) overrideResponseBody(originalRes *http.Response, copiedRes *HttpResponse, bodyOverride config.Body) error {
-// 	if bodyOverride.Template != "" {
-// 		templateInput, err := s.buildTemplateInput(&copiedRes.Headers, copiedRes.Body)
-// 		if err != nil {
-// 			return err
-// 		}
+func (s *server) overrideResponseBody(res *http.Response, templateInput map[string]any, bodyOverride config.Body) error {
+	if bodyOverride.Template != "" {
+		renderedBodyBytes, err := s.renderTemplateString(strings.TrimSpace(bodyOverride.Template), templateInput, nil)
+		if err != nil {
+			return err
+		}
 
-// 		renderedBodyBytes, err := s.renderTemplateString(strings.TrimSpace(bodyOverride.Template), templateInput, nil)
-// 		if err != nil {
-// 			return err
-// 		}
+		var buf bytes.Buffer
 
-// 		s.applyNewBodyToResponse(originalRes, renderedBodyBytes)
-// 		return nil
-// 	}
+		if err := json.Compact(&buf, renderedBodyBytes); err != nil {
+			return err
+		}
 
-// 	if len(bodyOverride.Patches) == 0 {
-// 		return nil
-// 	}
+		s.applyNewBodyToResponse(res, buf.Bytes())
+		return nil
+	}
 
-// 	bodyBytes, err := io.ReadAll(originalRes.Body)
-// 	if err != nil {
-// 		return err
-// 	}
+	if len(bodyOverride.Patches) == 0 {
+		return nil
+	}
 
-// 	newBody, err := s.applyPatchToJson(bodyOverride.Patches, bodyBytes)
-// 	if err != nil {
-// 		return err
-// 	}
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return err
+	}
 
-// 	s.applyNewBodyToResponse(originalRes, newBody)
-// 	return nil
-// }
+	newBody, err := s.applyPatchToJson(bodyOverride.Patches, bodyBytes)
+	if err != nil {
+		return err
+	}
+
+	s.applyNewBodyToResponse(res, newBody)
+	return nil
+}
 
 func (s *server) renderTemplateString(templateStr string, templateInput map[string]any, storage map[string]string) ([]byte, error) {
 	tmpl, err := template.New("body").Funcs(s.template.functionsWithStorage(storage)).Parse(templateStr)
@@ -300,11 +348,6 @@ func (s *server) renderTemplateString(templateStr string, templateInput map[stri
 }
 
 func (s *server) buildTemplateInputFromRequest(req *http.Request) (map[string]any, error) {
-	jsonBody, err := extractJsonBody(&req.Header, &req.Body)
-	if err != nil {
-		return nil, err
-	}
-
 	routeCtx := chi.RouteContext(req.Context())
 	pathParams := routeCtx.URLParams
 	pathParamsMap := make(map[string]string)
@@ -316,10 +359,16 @@ func (s *server) buildTemplateInputFromRequest(req *http.Request) (map[string]an
 	templateInput := map[string]any{
 		"path":       req.URL.Path,
 		"pathParams": pathParamsMap,
-		"body":       jsonBody,
 		"headers":    copyHeaders(req.Header),
+		"external":   s.templateVariables,
 	}
 
+	body, err := extractBody(&req.Header, &req.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	templateInput["body"] = body
 	return templateInput, nil
 }
 
@@ -331,6 +380,17 @@ func copyHeaders(original http.Header) http.Header {
 	}
 
 	return copy
+}
+
+func extractBody(headers *http.Header, body *io.ReadCloser) (extractedBody any, err error) {
+	switch headers.Get("Content-Type") {
+	case "application/json":
+		extractedBody, err = extractJsonBody(headers, body)
+	default:
+		extractedBody, err = copyBody(body)
+	}
+
+	return extractedBody, err
 }
 
 // extractJsonBody extracts the JSON body from the request/response as a map[string]any.
@@ -381,12 +441,12 @@ func (s *server) applyNewBodyToRequest(req *http.Request, body []byte) {
 	}
 }
 
-// func (s *server) applyNewBodyToResponse(res *http.Response, body []byte) {
-// 	res.Body = io.NopCloser(bytes.NewReader(body))
-// 	res.ContentLength = int64(len(body))
+func (s *server) applyNewBodyToResponse(res *http.Response, body []byte) {
+	res.Body = io.NopCloser(bytes.NewReader(body))
+	res.ContentLength = int64(len(body))
 
-// 	if res.Header != nil {
-// 		res.Header.Set("Content-Length", fmt.Sprintf("%d", len(body)))
-// 		res.Header.Del("Transfer-Encoding")
-// 	}
-// }
+	if res.Header != nil {
+		res.Header.Set("Content-Length", fmt.Sprintf("%d", len(body)))
+		res.Header.Del("Transfer-Encoding")
+	}
+}

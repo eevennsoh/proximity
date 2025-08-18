@@ -13,7 +13,9 @@ import (
 
 type server struct {
 	Options
-	*config.Config
+
+	config            *config.Config
+	templateVariables map[string]any
 
 	router     *chi.Mux
 	httpServer *http.Server
@@ -21,7 +23,7 @@ type server struct {
 	template *Template
 }
 
-func New(cfg *config.Config, options Options) Interface {
+func New(cfg *config.Config, templateVariables map[string]any, options Options) Interface {
 	router := chi.NewRouter()
 
 	httpServer := &http.Server{
@@ -30,11 +32,12 @@ func New(cfg *config.Config, options Options) Interface {
 	}
 
 	return &server{
-		Options:    options,
-		Config:     cfg,
-		router:     router,
-		httpServer: httpServer,
-		template:   newTemplate(options.Logger),
+		Options:           options,
+		config:            cfg,
+		templateVariables: templateVariables,
+		router:            router,
+		httpServer:        httpServer,
+		template:          newTemplate(options.Logger),
 	}
 }
 
@@ -49,7 +52,7 @@ func (s *server) RunServer(ctx context.Context) {
 		})
 	})
 
-	for _, supportedUri := range s.SupportedUris {
+	for _, supportedUri := range s.config.SupportedUris {
 		endpointProxyCfg, err := s.buildEndpointProxyConfig(supportedUri)
 		if err != nil {
 			s.Logger.Fatal(err)
@@ -69,7 +72,7 @@ func (s *server) Shutdown(ctx context.Context) error {
 }
 
 func (s *server) buildEndpointProxyConfig(uriMap config.UriMap) (*endpointProxyConfig, error) {
-	target, err := url.Parse(s.BaseEndpoint)
+	target, err := url.Parse(s.config.BaseEndpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -77,15 +80,15 @@ func (s *server) buildEndpointProxyConfig(uriMap config.UriMap) (*endpointProxyC
 	endpointProxyCfg := &endpointProxyConfig{
 		baseEndpoint:    target,
 		UriMap:          uriMap,
-		RequestResponse: s.Config.Overrides.Global,
+		RequestResponse: s.config.Overrides.Global,
 	}
 
-	uriCfg, ok := s.Config.Overrides.Uris[uriMap.In]
+	uriCfg, ok := s.config.Overrides.Uris[uriMap.In]
 	if !ok {
 		return endpointProxyCfg, nil
 	}
 
-	endpointProxyCfg.RequestResponse = mergeRequestResponse(s.Config.Overrides.Global, uriCfg)
+	endpointProxyCfg.RequestResponse = mergeRequestResponse(s.config.Overrides.Global, uriCfg)
 	return endpointProxyCfg, nil
 }
 

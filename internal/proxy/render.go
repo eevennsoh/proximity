@@ -25,13 +25,7 @@ type HttpResponse struct {
 }
 
 // renderRequest applies all config-driven transformations to the request and returns a new http.Request.
-func (s *server) renderRequest(req *http.Request, cfg *endpointProxyConfig) error {
-	// Build the template variable map to use the render everything
-	templateInput, err := s.buildTemplateInputFromRequest(req)
-	if err != nil {
-		return err
-	}
-
+func (s *server) renderRequest(req *http.Request, cfg *endpointProxyConfig, templateInput map[string]any) error {
 	if cfg.Out != "" {
 		renderedPath, err := s.renderTemplateString(strings.TrimSpace(cfg.Out), templateInput, nil)
 		if err != nil {
@@ -50,6 +44,22 @@ func (s *server) renderRequest(req *http.Request, cfg *endpointProxyConfig) erro
 
 	// Apply body patches/overrides as per config
 	if err := s.overrideRequestBody(req, templateInput, cfg.Request.Body); err != nil {
+		return fmt.Errorf("error applying body override: %v", err)
+	}
+
+	return nil
+}
+
+// renderResponse applies all config-driven transformations to the response and returns a new http.Reponse.
+func (s *server) renderResponse(res *http.Response, cfg *endpointProxyConfig, templateInput map[string]any) error {
+	for _, headerOperation := range cfg.Response.Headers {
+		if err := s.overrideHeader(headerOperation, &res.Header, templateInput); err != nil {
+			return err
+		}
+	}
+
+	// Apply body patches/overrides as per config
+	if err := s.overrideResponseBody(res, templateInput, cfg.Response.Body); err != nil {
 		return fmt.Errorf("error applying body override: %v", err)
 	}
 
