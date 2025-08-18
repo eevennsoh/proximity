@@ -8,6 +8,8 @@ supportedUris:
   - in: /openai/v1/chat/completions
     out: /v1/openai/v1/chat/completions
 
+  - in: /openai/v1/models
+
   # ******* CLAUDE ******* #
 
   - in: /bedrock/claude/v1/messages
@@ -53,6 +55,34 @@ overrides:
         headers: []
 
   uris:
+    # Generate the entire response to mimick an upstream OpenAI endpoint. This
+    # is done because AI-Gateway does not provide this endpoint.
+    /openai/v1/models:
+      response:
+        headers:
+          - op: add
+            name: Content-Type
+            text: application/json
+
+        body:
+          template: |
+            {
+              "object": "list",
+              "data": [
+                {{- $first := true }}
+                {{- range $model := .external.openai }}
+                {{- if not $first }},{{ end }}
+                {{- $first = false }}
+                {
+                  "id": "{{ $model }}",
+                  "object": "model",
+                  "created": {{ timestamp }},
+                  "owned_by": "atlassian"
+                }
+                {{- end }}
+              ]
+            }
+
     # Use the Bedrock provider. All models can be accessed through the proxy
     # using the anthropic claude format.
     /bedrock/claude/v1/messages:

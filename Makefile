@@ -8,16 +8,21 @@ ARCH=arm64
 CONFIG = $(shell cat config.yaml | base64 | tr -d "\n")
 CONFIG_DEV = $(shell cat config-dev.yaml | base64 | tr -d "\n")
 
-BUILD_LD_FLAGS = -X 'main.Config=$(CONFIG)' -X 'main.Port=29576'
-BUILD_LD_FLAGS_DEV = -X 'main.Config=$(CONFIG_DEV)' -X 'main.Port=29575'
+MODELS = $(shell cat models.json | base64 | tr -d "\n")
+
+BUILD_LD_FLAGS = -X 'main.Config=$(CONFIG)' -X 'main.TemplateVariables=$(MODELS)' -X 'main.Port=29576'
+BUILD_LD_FLAGS_DEV = -X 'main.Config=$(CONFIG_DEV)' -X 'main.TemplateVariables=$(MODELS)' -X 'main.Port=29575'
 
 .PHONY: run build package
 .DEFAULT_GOAL := run
 
+refresh-models:
+	./generate_models_json.sh
+
 run:
 	wails dev -skipbindings -ldflags "$(BUILD_LD_FLAGS_DEV)"
 
-build:
+build: refresh-models
 	wails build -skipbindings -clean -platform darwin/$(ARCH) -ldflags "$(BUILD_LD_FLAGS)"
 
 package: build

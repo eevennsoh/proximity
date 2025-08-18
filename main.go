@@ -17,6 +17,7 @@ import (
 var assets embed.FS
 
 var Config string
+var TemplateVariables string
 var Port string
 
 func main() {
@@ -25,7 +26,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	app := app.NewApp(Config, port)
+	app := app.NewApp(Config, TemplateVariables, port)
 
 	// Create application with options
 	err = wails.Run(&options.App{
@@ -45,8 +46,11 @@ func main() {
 				UseToolbar:                 false,
 				HideToolbarSeparator:       true,
 			},
+			WebviewIsTransparent: true,
+			WindowIsTranslucent:  true,
+			Appearance:           mac.NSAppearanceNameDarkAqua,
 		},
-		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
+		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 0},
 		OnStartup:        app.Startup,
 		Bind: []any{
 			app,

@@ -9,7 +9,7 @@ To run the proxy, just download the app:
 
 [Download](https://statlas.prod.atl-paas.net/vportella/proximity/proximity-arm64-latest.tar.gz)
 
-Then unpack the it and run this in your terminal:
+Then unpack it and run this in your terminal:
 
 ```shell
 xattr -d com.apple.quarantine ~/Downloads/Proximity.app

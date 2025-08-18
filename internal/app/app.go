@@ -15,6 +15,7 @@ import (
 	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
 	"bitbucket.org/atlassian-developers/mini-proxy/internal/proxy"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+	"gopkg.in/yaml.v3"
 )
 
 // App struct
@@ -25,16 +26,18 @@ type App struct {
 	running bool
 	logs    bytes.Buffer
 
-	proxy  proxy.Interface
-	config string
-	port   int
+	proxy             proxy.Interface
+	config            string
+	templateVariables string
+	port              int
 }
 
 // NewApp creates a new App application struct
-func NewApp(config string, port int) *App {
+func NewApp(config, templateVariables string, port int) *App {
 	return &App{
-		config: config,
-		port:   port,
+		config:            config,
+		templateVariables: templateVariables,
+		port:              port,
 	}
 }
 
@@ -60,11 +63,16 @@ func (a *App) StartProxy() error {
 		log.Fatal(err)
 	}
 
+	templateVariables, err := readTemplateVariables(a.templateVariables)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	// Create a pipe and a logger that writes to it so we can stream proxy logs to the UI
 	pr, pw := io.Pipe()
 	logger := log.New(pw, "", log.LstdFlags)
 
-	a.proxy = proxy.New(cfg, proxy.Options{
+	a.proxy = proxy.New(cfg, templateVariables, proxy.Options{
 		Port:     a.port,
 		TestMode: false,
 		Logger:   logger,
@@ -181,4 +189,19 @@ func (a *App) pipeLogs(r io.Reader) {
 		a.mu.Unlock()
 		wruntime.EventsEmit(a.ctx, "proxy:log", line)
 	}
+}
+
+func readTemplateVariables(templateVariableData string) (map[string]any, error) {
+	decodedConfig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(templateVariableData))
+	if err != nil {
+		return nil, err
+	}
+
+	var templateVariables map[string]any
+
+	if err := yaml.Unmarshal([]byte(decodedConfig), &templateVariables); err != nil {
+		return nil, err
+	}
+
+	return templateVariables, nil
 }
