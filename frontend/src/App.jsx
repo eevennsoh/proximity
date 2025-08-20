@@ -14,80 +14,34 @@ try {
   API = null;
 }
 
-function Badge({ children, variant = "success" }) {
-  const dot =
-    variant === "success"
-      ? "bg-emerald-400"
-      : variant === "danger"
-      ? "bg-rose-400"
-      : "bg-slate-400";
-
-  return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ring-inset bg-neutral-900 text-slate-300 ring-neutral-800">
-      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} />
-      {children}
-    </span>
-  );
-}
-
 const describeEndpoint = (p) => {
-  if (!p) return "Proxied endpoint.";
-
   if (p == "/openai/v1/chat/completions") {
-    return "OpenAI API";
+    return "OpenAI chat endpoint";
+  }
+
+  if (p == "/openai/v1/models") {
+    return "OpenAI models endpoint";
   }
 
   if (p == "/bedrock/claude/v1/messages") {
-    return "Anthropic Claude API";
+    return "Anthropic Claude chat endpoint";
   }
 
   if (p == "/provider/bedrock/format/openai/v1/chat/completions") {
-    return "Anthropic Claude API translated to an OpenAI compatible API";
+    return "Anthropic Claude translated to an OpenAI compatible endpoint";
   }
 
   if (p == "/google/gemini/v1beta/models/{model}:generateContent") {
-    return "Gemini API";
+    return "Gemini chat endpoint";
   }
 
   if (p == "/google/gemini/v1beta/models/{model}:streamGenerateContent") {
-    return "Gemini streamed API";
+    return "Gemini streamed chat endpoint";
   }
 
   return "Proxied endpoint.";
 };
 
-const getProviderColor = (provider) => {
-  switch (provider) {
-    case "OpenAI":
-      return {
-        container:
-          "bg-emerald-100 dark:bg-emerald-950/60 border-emerald-200 dark:border-emerald-800/80",
-        divide: "divide-emerald-200 dark:divide-emerald-800/80",
-        border: "border-emerald-200 dark:border-emerald-800/80",
-      };
-    case "Anthropic":
-      return {
-        container:
-          "bg-red-100 dark:bg-red-950/60 border-red-200 dark:border-red-800/80",
-        divide: "divide-red-200 dark:divide-red-800/80",
-        border: "border-red-200 dark:border-red-800/80",
-      };
-    case "Google":
-      return {
-        container:
-          "bg-sky-100 dark:bg-sky-950/60 border-sky-200 dark:border-sky-800/80",
-        divide: "divide-sky-200 dark:divide-sky-800/80",
-        border: "border-sky-200 dark:border-sky-800/80",
-      };
-    default:
-      return {
-        container:
-          "bg-neutral-100 dark:bg-neutral-800 border-neutral-200 dark:border-neutral-700",
-        divide: "divide-neutral-200 dark:divide-neutral-700",
-        border: "border-neutral-200 dark:border-neutral-700",
-      };
-  }
-};
 
 const getEndpointProvider = (path) => {
   if (path.startsWith("/openai")) return "OpenAI";
@@ -113,7 +67,6 @@ export default function App() {
   const [port, setPort] = useState(null);
   const [running, setRunning] = useState(false);
   const [logs, setLogs] = useState("");
-  const [busy, setBusy] = useState(false);
   const [endpoints, setEndpoints] = useState([]);
   const [activeTab, setActiveTab] = useState("routes");
   const [theme, setTheme] = useState(
@@ -199,25 +152,19 @@ export default function App() {
 
   const onStart = async () => {
     if (!API?.StartProxy) return;
-    setBusy(true);
     try {
       await API.StartProxy();
     } catch (e) {
       console.error(e);
-    } finally {
-      setBusy(false);
     }
   };
 
   const onStop = async () => {
     if (!API?.StopProxy) return;
-    setBusy(true);
     try {
       await API.StopProxy();
     } catch (e) {
       console.error(e);
-    } finally {
-      setBusy(false);
     }
   };
 
@@ -232,11 +179,11 @@ export default function App() {
 
 
   return (
-    <div className="h-screen overflow-hidden select-none bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 relative flex flex-col">
+    <div className="h-screen overflow-hidden select-none bg-transparent text-slate-800 dark:text-slate-100 relative flex flex-col">
       <div className="fixed top-0 left-0 right-0 h-2 app-drag z-10" />
       <header
         style={{ "--wails-draggable": "drag" }}
-        className="px-3 pb-2 pt-3 border-b border-neutral-200 dark:border-neutral-700 bg-neutral-100/60 dark:bg-neutral-900/60 backdrop-blur h-20 flex items-end"
+        className="px-3 pb-2 pt-3 bg-transparent h-20 flex items-end shadow-inner"
       >
         <div className="relative w-full flex items-center justify-between app-no-drag">
           <div
@@ -245,36 +192,36 @@ export default function App() {
           >
             <button
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              className="h-9 w-9 grid place-items-center rounded-md bg-neutral-200/60 dark:bg-neutral-800/60 ring-1 ring-neutral-300 dark:ring-neutral-700 text-slate-500 dark:text-slate-300"
+              className="h-8 w-8 grid place-items-center rounded-md font-medium text-sm border border-white/20 shadow-lg shadow-black/20 bg-[#0a84ff] text-white dark:bg-[#cecece] dark:text-slate-100"
             >
               {theme === "dark" ? (
-                <Sun className="h-5 w-5" />
+                <Sun className="h-5 w-5 text-slate-800" />
               ) : (
                 <Moon className="h-5 w-5" />
               )}
             </button>
-            <div className="relative inline-flex rounded-md border border-neutral-300 dark:border-neutral-700 bg-neutral-200/60 dark:bg-neutral-800/60 p-0.5 overflow-hidden">
+            <div className="relative inline-flex rounded-lg bg-black/10 dark:bg-black/20 p-0.5 overflow-hidden shadow-inner shadow-black/10">
               <span
-                className={`pointer-events-none absolute top-0.5 left-0.5 bottom-0.5 w-24 rounded bg-white dark:bg-neutral-700 transform-gpu transition-transform duration-100 ease-in-out ${
+                className={`pointer-events-none absolute top-0.5 left-0.5 bottom-0.5 w-24 rounded-md bg-[#1bc15b] dark:bg-[#1bc15b]/80 backdrop-blur-sm ring-1 ring-black/5 transform-gpu transition-transform duration-150 ease-in-out shadow-md shadow-black/20 border border-white/20 ${
                   activeTab === "logs" ? "translate-x-24" : "translate-x-0"
                 }`}
               />
               <button
                 onClick={() => setActiveTab("routes")}
-                className={`relative z-10 w-24 text-center px-3 py-1.5 text-sm rounded ${
+                className={`relative z-10 w-24 text-center px-3 py-1.5 text-sm rounded-md transition-colors duration-150 ${
                   activeTab === "routes"
-                    ? "text-slate-700 dark:text-slate-100"
-                    : "text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-slate-100"
+                    ? "text-slate-800 dark:text-slate-100"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                 }`}
               >
                 Routes
               </button>
               <button
                 onClick={() => setActiveTab("logs")}
-                className={`relative z-10 w-24 text-center px-3 py-1.5 text-sm rounded ${
+                className={`relative z-10 w-24 text-center px-3 py-1.5 text-sm rounded-md transition-colors duration-150 ${
                   activeTab === "logs"
-                    ? "text-slate-700 dark:text-slate-100"
-                    : "text-slate-500 dark:text-slate-300 hover:text-slate-700 dark:hover:text-slate-100"
+                    ? "text-slate-800 dark:text-slate-100"
+                    : "text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200"
                 }`}
               >
                 Logs
@@ -282,19 +229,16 @@ export default function App() {
             </div>
           </div>
           <div
-            style={{ "--wails-draggable": "no-drag" }}
-            className="flex items-center gap-3"
+            style={{ "--wails-draggable": "drag" }}
+            className="flex items-center gap-2"
           >
-            <div className="h-9 w-9 rounded-lg bg-neutral-200/60 dark:bg-neutral-800/60 ring-1 ring-neutral-300 dark:ring-neutral-700 grid place-items-center">
-              <Sparkles className="h-5 w-5 text-slate-500 dark:text-slate-300" />
+            <div className="h-8 w-8 rounded-md bg-[#8A2BE2] grid place-items-center transition border border-white/20 shadow-lg shadow-black/20">
+              <Sparkles className="h-5 w-5 text-white" />
             </div>
             <div>
               <h1 className="text-lg font-semibold tracking-tight text-slate-800 dark:text-slate-200">
                 Proximity
               </h1>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Enterprise AI APIs via AI-Gateway
-              </p>
             </div>
           </div>
           <div
@@ -303,26 +247,20 @@ export default function App() {
           >
             {port != null && (
               <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ring-1 ring-inset select-text cursor-text transition-all duration-150 bg-neutral-200/60 dark:bg-neutral-900 ${
-                  running
-                    ? "text-emerald-800 dark:text-emerald-700 ring-emerald-300/30 dark:ring-emerald-900/60 opacity-100"
-                    : "text-slate-500 dark:text-slate-300 ring-neutral-300 dark:ring-neutral-800 opacity-40"
-                }`}
-              >{`Listening on port ${port}`}</span>
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium select-text cursor-text bg-black/10 dark:bg-black/20 shadow-inner shadow-black/10 text-slate-500 dark:text-slate-400`}
+              >{`Port ${port}`}</span>
             )}
             {!running ? (
               <button
-                disabled={busy}
                 onClick={onStart}
-                className="inline-flex items-center justify-center w-28 rounded-md bg-[#0a84ff] hover:bg-[#409cff] text-white font-medium px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="inline-flex items-center justify-center w-28 rounded-md bg-[#0a84ff] hover:bg-[#409cff] text-white font-medium px-3 py-1.5 text-sm transition border border-white/20 shadow-lg shadow-black/20"
               >
                 Start Proxy
               </button>
             ) : (
               <button
-                disabled={busy}
                 onClick={onStop}
-                className="inline-flex items-center justify-center w-28 rounded-md bg-[#ff453a] hover:bg-[#ff6961] text-white font-medium px-3 py-1.5 text-sm disabled:opacity-50 disabled:cursor-not-allowed transition"
+                className="inline-flex items-center justify-center w-28 rounded-md bg-[#ff453a] hover:bg-[#ff6961] text-white font-medium px-3 py-1.5 text-sm transition border border-white/20 shadow-lg shadow-black/20"
               >
                 Stop Proxy
               </button>
@@ -331,55 +269,39 @@ export default function App() {
         </div>
       </header>
 
-      <main className="p-3 flex-1 overflow-hidden min-h-0 min-w-0">
-        <div className="rounded-lg border border-neutral-200 dark:border-neutral-700 bg-neutral-100/60 dark:bg-neutral-800/60 p-0 divide-y divide-neutral-200 dark:divide-neutral-700 h-full min-h-0 min-w-0 w-full flex flex-col overflow-hidden">
-          <div className="flex items-center justify-between p-3 h-12 bg-neutral-200/80 dark:bg-neutral-800 shrink-0">
-            <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">
-              {activeTab === "logs" ? "Logs" : "Routes"}
-            </div>
-            {activeTab === "logs" && (
-              <button
-                onClick={onClearLogs}
-                className="inline-flex items-center rounded-md border border-neutral-300 dark:border-neutral-700 bg-neutral-200 dark:bg-neutral-800 hover:bg-neutral-300/70 dark:hover:bg-neutral-700 px-3 py-1.5 text-sm text-slate-600 dark:text-slate-200 transition"
-              >
-                Clear logs
-              </button>
-            )}
-          </div>
+      <main className="flex-1 overflow-hidden min-h-0 min-w-0 p-1">
+        <div className="shadow-md bg-neutral-100/60 dark:bg-neutral-900 p-0 h-full min-h-0 min-w-0 w-full flex flex-col overflow-hidden rounded-lg">
           <div
             ref={logsRef}
-            className={`flex-1 min-h-0 min-w-0 overflow-auto p-3 ${
-              activeTab === "logs" ? "bg-white dark:bg-neutral-900" : ""
-            }`}
+            className="flex-1 min-h-0 min-w-0 overflow-auto no-scrollbar"
           >
             {activeTab === "logs" ? (
-              <div className="font-mono text-xs leading-relaxed text-slate-800/90 dark:text-slate-200/90 whitespace-pre-wrap break-all w-full min-w-0 min-h-0 select-text">
+              <div className="font-mono text-xs leading-relaxed text-slate-800/90 dark:text-slate-200/90 whitespace-pre-wrap break-all w-full min-w-0 min-h-0 select-text p-4">
                 {logs?.length ? logs : "No logs yet."}
               </div>
             ) : (
-              <div>
+              <div className="p-2">
                 {endpoints?.length ? (
-                  <div className="space-y-4">
+                  <div className="space-y-3">
                     {Object.entries(groupEndpoints(endpoints)).map(
                       ([provider, providerEndpoints]) => {
-                        const colors = getProviderColor(provider);
                         return (
                           <div
                             key={provider}
-                            className={`rounded-lg border ${colors.container} overflow-hidden shadow`}
+                            className="rounded-lg bg-[hsl(240,5%,15%)] shadow-lg shadow-black/20 border border-[hsl(240,5%,14%)] overflow-hidden"
                           >
                             <div
-                              className={`p-3 border-b ${colors.border} bg-black/5 dark:bg-white/5 rounded-t-lg`}
+                              className="px-3 py-2 border-b border-[hsl(240,5%,11%)] bg-black/20"
                             >
-                              <h2 className="text-base font-semibold text-slate-700 dark:text-slate-200">
+                              <h2 className="text-lg font-semibold tracking-wide text-slate-700 dark:text-slate-200">
                                 {provider}
                               </h2>
                             </div>
-                            <div className={`divide-y ${colors.divide}`}>
+                            <div className="divide-y divide-[hsl(240,5%,12%)]">
                               {providerEndpoints.map((e, i) => (
                                 <div
                                   key={i}
-                                  className="p-3 hover:bg-black/5 dark:hover:bg-white/5"
+                                  className="p-3"
                                 >
                                   <div className="text-[15px] font-medium text-slate-700 dark:text-slate-200">
                                     {describeEndpoint(e.in)}

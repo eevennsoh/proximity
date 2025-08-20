@@ -23,7 +23,7 @@ html, body, #root {
 }
 
 body {
-  @apply bg-slate-950 text-slate-50 antialiased;
+  @apply bg-transparent text-slate-50 antialiased;
   overflow: hidden;
   font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
 }
@@ -47,41 +47,21 @@ body {
   -webkit-app-region: no-drag;
 }
 
-/* Subtle grid/scanline for logs surface */
-.log-surface {
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-  background-size: 24px 24px, 24px 24px;
-  background-position: 0 0, 0 0;
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
-/* Optional shimmering highlight utility (used for decorative accents) */
-.shimmer-line {
-  position: relative;
-  overflow: hidden;
-}
-.shimmer-line::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  transform: translateX(-100%);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.07), transparent);
-  animation: shimmer 2.2s linear infinite;
-}
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
-/* Remove number input spinners (Chrome/Safari/Edge) */
-input[type="number"]::-webkit-outer-spin-button,
-input[type="number"]::-webkit-inner-spin-button {
-  -webkit-appearance: none;
-  margin: 0;
+/* Set default cursor for non-selectable text */
+.select-none {
+  cursor: default;
 }
-/* Remove number input spinners (Firefox + generic) */
-input[type="number"] {
-  -moz-appearance: textfield;
-  appearance: textfield;
+
+/* Set text cursor for selectable text */
+.select-text {
+  cursor: text;
 }
