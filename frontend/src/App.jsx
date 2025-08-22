@@ -24,11 +24,15 @@ const describeEndpoint = (p) => {
   }
 
   if (p == "/bedrock/claude/v1/messages") {
-    return "Anthropic Claude chat endpoint";
+    return "Claude chat endpoint";
   }
 
   if (p == "/provider/bedrock/format/openai/v1/chat/completions") {
-    return "Anthropic Claude translated to an OpenAI compatible endpoint";
+    return "Claude translated to an OpenAI compatle endpoint";
+  }
+
+  if (p == "/provider/bedrock/format/openai/v1/models") {
+    return "Claude models translated to an OpenAI compatible endpoint";
   }
 
   if (p == "/google/gemini/v1beta/models/{model}:generateContent") {

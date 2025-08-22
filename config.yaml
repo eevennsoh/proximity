@@ -20,6 +20,8 @@ supportedUris:
     out: |
       /v1/bedrock/model/{{ trim .body.model "anthropic." "-v1:0" }}/invoke{{- if eq (index .body.stream) true -}}-with-response-stream{{- end -}}
 
+  - in: /provider/bedrock/format/openai/v1/models
+
   # ******* GEMINI ******* #
 
   - in: /google/gemini/v1beta/models/{model}:generateContent
@@ -351,3 +353,29 @@ overrides:
               {{- end }}
               }
             {{- end }}
+
+    /provider/bedrock/format/openai/v1/models:
+      response:
+        headers:
+          - op: add
+            name: Content-Type
+            text: application/json
+
+        body:
+          template: |
+            {
+              "object": "list",
+              "data": [
+                {{- $first := true }}
+                {{- range $model := .external.anthropic }}
+                {{- if not $first }},{{ end }}
+                {{- $first = false }}
+                {
+                  "id": "{{ $model }}",
+                  "object": "model",
+                  "created": {{ timestamp }},
+                  "owned_by": "atlassian"
+                }
+                {{- end }}
+              ]
+            }
