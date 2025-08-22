@@ -27,6 +27,10 @@ const describeEndpoint = (p) => {
     return "Claude chat endpoint";
   }
 
+  if (p == "/bedrock/claude/v1/models") {
+    return "Claude models endpoint";
+  }
+
   if (p == "/provider/bedrock/format/openai/v1/chat/completions") {
     return "Claude translated to an OpenAI compatle endpoint";
   }
@@ -49,9 +53,9 @@ const describeEndpoint = (p) => {
 
 const getEndpointProvider = (path) => {
   if (path.startsWith("/openai")) return "OpenAI";
-  if (path.startsWith("/bedrock")) return "Anthropic";
-  if (path.startsWith("/provider/bedrock")) return "Anthropic";
-  if (path.startsWith("/google")) return "Google";
+  if (path.startsWith("/bedrock")) return "Claude";
+  if (path.startsWith("/provider/bedrock")) return "Claude";
+  if (path.startsWith("/google")) return "Gemini";
   return "Other";
 };
 

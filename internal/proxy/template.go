@@ -64,6 +64,9 @@ func (t *Template) functionsWithStorage(temporaryStorage map[string]string) temp
 		"timestamp": func() string {
 			return fmt.Sprintf("%d", time.Now().Unix())
 		},
+		"formattedTimestamp": func(layout string) string {
+			return fmt.Sprint(time.Now().Format(layout))
+		},
 		"set": func(key string, val any) string {
 			temporaryStorage[key] = fmt.Sprintf("%v", val)
 			return ""
@@ -85,6 +88,9 @@ func (t *Template) functionsWithStorage(temporaryStorage map[string]string) temp
 			}
 
 			return fmt.Sprintf("%d", total)
+		},
+		"subtract": func(a, b int) int {
+			return a - b
 		},
 		"slauthtoken": func(groups string, audience string, environment string) string {
 			token, exists := t.permanentStorage["token"]

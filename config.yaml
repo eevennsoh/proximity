@@ -16,6 +16,8 @@ supportedUris:
     out: |
       /v1/bedrock/model/{{ trim .body.model "anthropic." "-v1:0" }}/invoke{{- if eq (index .body.stream) true -}}-with-response-stream{{- end -}}
 
+  - in: /bedrock/claude/v1/models
+
   - in: /provider/bedrock/format/openai/v1/chat/completions
     out: |
       /v1/bedrock/model/{{ trim .body.model "anthropic." "-v1:0" }}/invoke{{- if eq (index .body.stream) true -}}-with-response-stream{{- end -}}
@@ -154,6 +156,34 @@ overrides:
                 {{ toJson .event }}
               {{- end }}
             {{- end }}
+
+    /bedrock/claude/v1/models:
+      response:
+        headers:
+          - op: add
+            name: Content-Type
+            text: application/json
+
+        body:
+          template: |
+            {
+              "data": [
+                {{- $first := true }}
+                {{- range $model := .external.anthropic }}
+                {{- if not $first }},{{ end }}
+                {{- $first = false }}
+                {
+                  "created_at": "{{ formattedTimestamp "2006-01-02T15:04:05Z" }}",
+                  "display_name": "{{ $model }}",
+                  "id": "{{ $model }}",
+                  "type": "model"
+                }
+                {{- end }}
+              ],
+              "first_id": "{{ index .external.anthropic 0 }}",
+              "has_more": false,
+              "last_id": "{{ index .external.anthropic (subtract (len .external.anthropic) 1) }}"
+            }
 
     /provider/bedrock/format/openai/v1/chat/completions:
       request:
