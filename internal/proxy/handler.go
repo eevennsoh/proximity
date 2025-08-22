@@ -128,7 +128,8 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 		// Build the template variable map to use the render everything
 		templateInput, err := s.buildTemplateInputFromRequest(r)
 		if err != nil {
-			s.Logger.Fatal(err)
+			s.Logger.Println(err)
+			return
 		}
 
 		if cfg.Out == "" {
@@ -142,7 +143,8 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 		}
 
 		if err := s.renderRequest(r, cfg, templateInput); err != nil {
-			s.Logger.Fatal(err)
+			s.Logger.Println(err)
+			return
 		}
 
 		proxyHandler := s.endpointProxy(cfg)
@@ -160,12 +162,14 @@ func (s *server) endpointProxy(cfg *endpointProxyConfig) *httputil.ReverseProxy 
 func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
 	reqCopy, err := copyRequest(r)
 	if err != nil {
-		s.Logger.Fatal(err)
+		s.Logger.Println(err)
+		return
 	}
 
 	bodyMap, err := extractJsonBody(&r.Header, &r.Body)
 	if err != nil {
-		s.Logger.Fatal(err)
+		s.Logger.Println(err)
+		return
 	}
 
 	reqCopy.Body = bodyMap
@@ -174,7 +178,8 @@ func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
 
 	pretty, err := json.MarshalIndent(reqCopy, "", "  ")
 	if err != nil {
-		s.Logger.Fatal(err)
+		s.Logger.Println(err)
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -386,6 +391,11 @@ func extractBody(headers *http.Header, body *io.ReadCloser) (extractedBody any, 
 	switch headers.Get("Content-Type") {
 	case "application/json":
 		extractedBody, err = extractJsonBody(headers, body)
+		if err == nil {
+			return
+		}
+
+		fallthrough
 	default:
 		extractedBody, err = copyBody(body)
 	}

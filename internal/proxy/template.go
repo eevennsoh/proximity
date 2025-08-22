@@ -35,7 +35,8 @@ func (t *Template) functionsWithStorage(temporaryStorage map[string]string) temp
 		"toJson": func(v any) string {
 			b, err := json.Marshal(v)
 			if err != nil {
-				t.logger.Fatal(err)
+				t.logger.Println(err)
+				return ""
 			}
 
 			return string(b)
@@ -46,7 +47,8 @@ func (t *Template) functionsWithStorage(temporaryStorage map[string]string) temp
 		"safeEncode": func(v any) string {
 			jsonBytes, err := json.Marshal(v)
 			if err != nil {
-				t.logger.Fatal(err)
+				t.logger.Println(err)
+				return ""
 			}
 
 			safeString := string(jsonBytes)
@@ -75,7 +77,8 @@ func (t *Template) functionsWithStorage(temporaryStorage map[string]string) temp
 			for _, numStr := range nums {
 				num, err := strconv.Atoi(numStr)
 				if err != nil {
-					t.logger.Fatal(err)
+					t.logger.Println(err)
+					return ""
 				}
 
 				total += num
@@ -96,7 +99,8 @@ func (t *Template) functionsWithStorage(temporaryStorage map[string]string) temp
 
 			token, err := t.requestSlauthToken(strings.Split(groups, ","), audience, environment)
 			if err != nil {
-				t.logger.Fatal(err)
+				t.logger.Println(err)
+				return ""
 			}
 
 			t.permanentStorage["token"] = token
