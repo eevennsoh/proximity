@@ -11,15 +11,10 @@ TMP_FILE=$(mktemp)
 
 # Loop through all provided queries
 for query in "$@"; do
-  atlas ml aigateway model list -x "$query" -e stg-east | \
-  perl -pe 's/\x1B\[[0-9;?]*[a-zA-Z]//g' | \
-  awk -F'│' 'NF>=3 { 
-    sn=$2; 
-    gsub(/^[[:space:]]+|[[:space:]]+$/, "", sn); 
-    mid=$3; 
-    gsub(/^[[:space:]]+|[[:space:]]+$/, "", mid); 
-    if (sn ~ /^[0-9]+$/ && mid != "") print mid 
-  }' >> "$TMP_FILE"
+  atlas ml aigateway model list -x "$query" \
+    | sed 's/\x1b\[[0-9;]*m//g' \
+    | awk -F '│' '{gsub(/ /,"",$2); if (length($2) > 0 && $2 != "ModelID") print $2}' \
+    >> "$TMP_FILE"
 done
 
 # Output the final concatenated result
