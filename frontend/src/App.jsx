@@ -32,7 +32,7 @@ const describeEndpoint = (p) => {
   }
 
   if (p == "/provider/bedrock/format/openai/v1/chat/completions") {
-    return "Claude translated to an OpenAI compatle endpoint";
+    return "Claude translated to an OpenAI compatible endpoint";
   }
 
   if (p == "/provider/bedrock/format/openai/v1/models") {
