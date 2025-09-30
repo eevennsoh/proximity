@@ -8,6 +8,9 @@ supportedUris:
   - in: /openai/v1/chat/completions
     out: /v1/openai/v1/chat/completions
 
+  - in: /openai/v1/responses
+    out: /v1/openai/v1/responses
+
   - in: /openai/v1/models
 
   # ******* CLAUDE ******* #
