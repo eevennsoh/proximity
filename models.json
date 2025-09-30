@@ -3,16 +3,19 @@
     "gpt-4.1-2025-04-14",
     "gpt-4.1-mini-2025-04-14",
     "gpt-5-2025-08-07",
+    "gpt-5-nano-2025-08-07",
     "gpt-5-mini-2025-08-07",
-    "gpt-5-nano-2025-08-07"
+    "gpt-5-codex"
   ],
   "anthropic": [
     "anthropic.claude-3-5-haiku-20241022-v1:0",
     "anthropic.claude-3-5-sonnet-20240620-v1:0",
     "anthropic.claude-3-5-sonnet-20241022-v2:0",
     "anthropic.claude-3-7-sonnet-20250219-v1:0",
+    "anthropic.claude-opus-4-1-20250805-v1:0",
     "anthropic.claude-opus-4-20250514-v1:0",
-    "anthropic.claude-sonnet-4-20250514-v1:0"
+    "anthropic.claude-sonnet-4-20250514-v1:0",
+    "anthropic.claude-sonnet-4-5-20250929-v1:0"
   ],
   "gemini": [
     "gemini-1.5-pro-002",

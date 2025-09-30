@@ -19,6 +19,10 @@ const describeEndpoint = (p) => {
     return "OpenAI chat endpoint";
   }
 
+  if (p == "/openai/v1/responses") {
+    return "OpenAI response endpoint";
+  }
+
   if (p == "/openai/v1/models") {
     return "OpenAI models endpoint";
   }

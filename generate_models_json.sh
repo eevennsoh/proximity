@@ -2,7 +2,14 @@
 
 # Run queries for each provider and capture the output
 echo "Fetching OpenAI models..."
-openai_models=$(./refresh_models.sh "family=gpt-4.1-family&vendor=openai" "family=gpt-4.1-mini-family&vendor=openai" "family=gpt-5-family&vendor=openai")
+openai_models=$(./refresh_models.sh \
+  "family=gpt-4.1-family&vendor=openai" \
+  "family=gpt-4.1-mini-family&vendor=openai" \
+  "family=gpt-5-family&vendor=openai" \
+  "family=gpt-5-nano-family&vendor=openai" \
+  "family=gpt-5-mini-family&vendor=openai" \
+  "family=gpt-5-codex-family&vendor=openai" \
+)
 
 echo "Fetching Anthropic (Bedrock) models..."
 anthropic_models=$(./refresh_models.sh "family=claude-family&vendor=bedrock")
