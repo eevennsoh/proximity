@@ -55,7 +55,7 @@ make package
 
 ## Usage
 
-The proxy runs on **port 29576** or **29575** (for development) and provides multiple endpoints to mimic different LLM providers.
+The proxy runs on port `29576` (or `29575` for development) and provides multiple endpoints to mimic different LLM providers.
 
 ### OpenAI Chat Completions
 
