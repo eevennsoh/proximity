@@ -283,7 +283,9 @@ export default function App() {
           >
             {port != null && (
               <span
-                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium select-text cursor-text bg-black/10 dark:bg-black/20 shadow-inner shadow-black/10 text-slate-500 dark:text-slate-400`}
+                onClick={() => copyToClipboard(port.toString())}
+                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium select-none bg-black/10 dark:bg-black/20 hover:bg-black/15 dark:hover:bg-black/30 shadow-inner shadow-black/10 text-slate-500 dark:text-slate-400 transition-colors`}
+                style={{ cursor: 'pointer' }}
               >{`Port ${port}`}</span>
             )}
             {!running ? (
