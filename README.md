@@ -53,6 +53,10 @@ make build
 make package
 ```
 
+## Screenshot
+
+![](docs/images/screenshot.png)
+
 ## Usage
 
 The proxy runs on port `29576` (or `29575` for development) and provides multiple endpoints to mimic different LLM providers.
