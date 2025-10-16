@@ -17,13 +17,13 @@ supportedUris:
 
   - in: /bedrock/claude/v1/messages
     out: |
-      /v1/bedrock/model/{{ trim .body.model "anthropic." "-v1:0" }}/invoke{{- if eq (index .body.stream) true -}}-with-response-stream{{- end -}}
+      /v1/bedrock/model/{{ trim .body.model "anthropic." "-v1:0" }}/invoke{{- if .body.stream -}}-with-response-stream{{- end -}}
 
   - in: /bedrock/claude/v1/models
 
   - in: /provider/bedrock/format/openai/v1/chat/completions
     out: |
-      /v1/bedrock/model/{{ trim .body.model "anthropic." "-v1:0" }}/invoke{{- if eq (index .body.stream) true -}}-with-response-stream{{- end -}}
+      /v1/bedrock/model/{{ trim .body.model "anthropic." "-v1:0" }}/invoke{{- if .body.stream -}}-with-response-stream{{- end -}}
 
   - in: /provider/bedrock/format/openai/v1/models
 
