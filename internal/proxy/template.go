@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 
 type Template struct {
 	logger *log.Logger
+	mu     sync.RWMutex
 
 	// Storage which lasts for the lifetime of the proxy.
 	permanentStorage map[string]string
@@ -56,10 +58,15 @@ func (t *Template) functionsWithStorage(temporaryStorage map[string]string) temp
 			safeString, _ = strings.CutSuffix(safeString, "\"")
 			return safeString
 		},
-		"trim": func(str, prefix, suffix string) string {
+		"normalize": func(str, prefix, suffix string) string {
 			str = strings.TrimPrefix(str, prefix)
 			str = strings.TrimSuffix(str, suffix)
 			return prefix + str + suffix
+		},
+		"trim": func(str, prefix, suffix string) string {
+			str = strings.TrimPrefix(str, prefix)
+			str = strings.TrimSuffix(str, suffix)
+			return str
 		},
 		"timestamp": func() string {
 			return fmt.Sprintf("%d", time.Now().Unix())
@@ -93,7 +100,9 @@ func (t *Template) functionsWithStorage(temporaryStorage map[string]string) temp
 			return a - b
 		},
 		"slauthtoken": func(groups string, audience string, environment string) string {
+			t.mu.RLock()
 			token, exists := t.permanentStorage["token"]
+			t.mu.RUnlock()
 
 			// If there is an existing token and it is still valid then use it.
 			if exists && !t.tokenHasExpired(token) {
