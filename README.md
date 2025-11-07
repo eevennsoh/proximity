@@ -113,6 +113,26 @@ curl -X POST http://localhost:29576/bedrock/claude/v1/messages \
 curl http://localhost:29576/bedrock/claude/v1/models
 ```
 
+### Using Claude Code with Proximity
+
+Claude Code can connect to Proximity to access enterprise AI models through AI-Gateway. Configure Claude Code by setting these environment variables:
+
+```bash
+export ANTHROPIC_BEDROCK_BASE_URL=http://localhost:29576/bedrock/claude/v1/
+export CLAUDE_CODE_USE_BEDROCK=1
+export CLAUDE_CODE_SKIP_BEDROCK_AUTH=1
+
+# use atlas ml aigateway model list -x "family=claude-family" to see a list of models
+export ANTHROPIC_MODEL=anthropic.claude-sonnet-4-5-20250929-v1:0
+```
+
+Then start Claude Code:
+
+```bash
+source claude-from-ai-gateway.sh  # or wherever you store these variables
+claude
+```
+
 ### Anthropic ↔ OpenAI Translation
 
 Use Claude models with OpenAI-compatible clients without code changes.

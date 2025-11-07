@@ -21,6 +21,13 @@ supportedUris:
 
   - in: /bedrock/claude/v1/models
 
+  # Claude Code direct model invocation endpoints
+  - in: /bedrock/claude/v1/model/{model}/invoke
+    out: /v1/bedrock/model/{{ .pathParams.model }}/invoke
+
+  - in: /bedrock/claude/v1/model/{model}/invoke-with-response-stream
+    out: /v1/bedrock/model/{{ .pathParams.model }}/invoke-with-response-stream
+
   - in: /provider/bedrock/format/openai/v1/chat/completions
     out: |
       /v1/bedrock/model/{{ trim .body.model "anthropic." "-v1:0" }}/invoke{{- if .body.stream -}}-with-response-stream{{- end -}}
@@ -159,6 +166,88 @@ overrides:
                 {{ toJson .event }}
               {{- end }}
             {{- end }}
+
+    /bedrock/claude/v1/model/{model}/invoke:
+      request:
+        headers:
+          - op: remove
+            name: anthropic-version
+          - op: remove
+            name: x-api-key
+        body:
+          template: |
+            {
+              {{- $first := true }}
+              {{- range $k, $v := .body }}
+              {{- if and (ne $k "model") (ne $k "stream") (ne $k "messages") }}
+                {{- if not $first }},{{ end }}
+                "{{ $k }}": {{ toJson $v }}
+                {{- $first = false }}
+              {{- end }}
+              {{- end }},
+              "anthropic_version": "bedrock-2023-05-31",
+              "messages": [
+                {{- $firstMsg := true }}
+                {{- range $msg := .body.messages }}
+                  {{- if not $firstMsg }},{{ end }}
+                  {{- $firstMsg = false }}
+                  {{- if eq (getType $msg.content) "string" }}
+                    {
+                      "role": "{{ $msg.role }}",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "{{ safeEncode $msg.content }}"
+                        }
+                      ]
+                    }
+                  {{- else }}
+                    {{ toJson $msg }}
+                  {{- end }}
+                {{- end }}
+              ]
+            }
+
+    /bedrock/claude/v1/model/{model}/invoke-with-response-stream:
+      request:
+        headers:
+          - op: remove
+            name: anthropic-version
+          - op: remove
+            name: x-api-key
+        body:
+          template: |
+            {
+              {{- $first := true }}
+              {{- range $k, $v := .body }}
+              {{- if and (ne $k "model") (ne $k "stream") (ne $k "messages") }}
+                {{- if not $first }},{{ end }}
+                "{{ $k }}": {{ toJson $v }}
+                {{- $first = false }}
+              {{- end }}
+              {{- end }},
+              "anthropic_version": "bedrock-2023-05-31",
+              "messages": [
+                {{- $firstMsg := true }}
+                {{- range $msg := .body.messages }}
+                  {{- if not $firstMsg }},{{ end }}
+                  {{- $firstMsg = false }}
+                  {{- if eq (getType $msg.content) "string" }}
+                    {
+                      "role": "{{ $msg.role }}",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "{{ safeEncode $msg.content }}"
+                        }
+                      ]
+                    }
+                  {{- else }}
+                    {{ toJson $msg }}
+                  {{- end }}
+                {{- end }}
+              ]
+            }
 
     /bedrock/claude/v1/models:
       response:
