@@ -44,6 +44,14 @@ const describeEndpoint = (p) => {
     return "Model list endpoint";
   }
 
+  if (p == "/bedrock/claude/v1/model/{model}/invoke") {
+    return "Claude Code invocation endpoint";
+  }
+
+  if (p == "/bedrock/claude/v1/model/{model}/invoke-with-response-stream") {
+    return "Claude Code invocation endpoint (streaming)";
+  }
+
   if (p == "/provider/bedrock/format/openai/v1/chat/completions") {
     return "OpenAI compatible chat endpoint";
   }
