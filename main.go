@@ -13,12 +13,15 @@ import (
 	"bitbucket.org/atlassian-developers/mini-proxy/internal/app"
 )
 
-//go:embed all:frontend/dist
-var assets embed.FS
+var (
+	//go:embed all:frontend/dist
+	assets embed.FS
 
-var Config string
-var TemplateVariables string
-var Port string
+	Port              string
+	Config            string
+	SettingsPath      string
+	TemplateVariables string
+)
 
 func main() {
 	port, err := strconv.Atoi(Port)
@@ -26,7 +29,12 @@ func main() {
 		log.Fatal(err)
 	}
 
-	app := app.NewApp(Config, TemplateVariables, port)
+	app := app.NewApp(
+		Config,
+		TemplateVariables,
+		port,
+		SettingsPath,
+	)
 
 	// Create application with options
 	err = wails.Run(&options.App{

@@ -14,15 +14,15 @@ import (
 
 	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
 	"bitbucket.org/atlassian-developers/mini-proxy/internal/proxy"
+	"bitbucket.org/atlassian-developers/mini-proxy/internal/settings"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"gopkg.in/yaml.v3"
 )
 
 // App struct
 type App struct {
-	ctx context.Context
-	mu  sync.Mutex
-	// cmd     *exec.Cmd
+	ctx     context.Context
+	mu      sync.Mutex
 	running bool
 	logs    bytes.Buffer
 
@@ -30,14 +30,18 @@ type App struct {
 	config            string
 	templateVariables string
 	port              int
+
+	settingsPath string
+	settings     *settings.Struct
 }
 
 // NewApp creates a new App application struct
-func NewApp(config, templateVariables string, port int) *App {
+func NewApp(config, templateVariables string, port int, settingsPath string) *App {
 	return &App{
 		config:            config,
 		templateVariables: templateVariables,
 		port:              port,
+		settingsPath:      settingsPath,
 	}
 }
 
@@ -45,9 +49,25 @@ func NewApp(config, templateVariables string, port int) *App {
 // so we can call the runtime methods
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+
+	var err error
+
+	// Check if auto-start is enabled
+	a.settings, err = settings.Read(a.settingsPath)
+	if err != nil {
+		log.Printf("Failed to read settings: %v", err)
+		return
+	}
+
+	if a.settings.AutoStartProxy {
+		log.Println("Auto-starting proxy")
+
+		if err := a.StartProxy(); err != nil {
+			log.Printf("Failed to auto-start proxy: %v", err)
+		}
+	}
 }
 
-// StartProxy builds (if needed) and starts the proxy as a subprocess
 func (a *App) StartProxy() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -72,10 +92,13 @@ func (a *App) StartProxy() error {
 	pr, pw := io.Pipe()
 	logger := log.New(pw, "", log.LstdFlags)
 
-	a.proxy = proxy.New(cfg, templateVariables, proxy.Options{
-		Port:     a.port,
-		TestMode: false,
-		Logger:   logger,
+	a.proxy = proxy.New(proxy.Options{
+		Port:              a.port,
+		TestMode:          false,
+		Logger:            logger,
+		Config:            cfg,
+		Settings:          a.settings,
+		TemplateVariables: templateVariables,
 	})
 
 	a.running = true

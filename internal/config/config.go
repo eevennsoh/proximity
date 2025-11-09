@@ -21,8 +21,9 @@ type Config struct {
 }
 
 type UriMap struct {
-	In  string `yaml:"in"`
-	Out string `yaml:"out"`
+	In           string `yaml:"in"`
+	Out          string `yaml:"out"`
+	BaseEndpoint string `yaml:"baseEndpoint"`
 }
 
 type Overrides struct {

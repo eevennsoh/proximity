@@ -102,7 +102,6 @@ func (t *Template) functionsWithStorage(temporaryStorage map[string]string) temp
 		"slauthtoken": func(groups string, audience string, environment string) string {
 			t.mu.RLock()
 			token, exists := t.permanentStorage["token"]
-			t.mu.RUnlock()
 
 			// If there is an existing token and it is still valid then use it.
 			if exists && !t.tokenHasExpired(token) {
@@ -119,6 +118,7 @@ func (t *Template) functionsWithStorage(temporaryStorage map[string]string) temp
 			}
 
 			t.permanentStorage["token"] = token
+			t.mu.RUnlock()
 			return token
 		},
 	}
