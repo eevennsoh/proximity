@@ -136,18 +136,16 @@ func (s *server) overrideHeaders(headers []config.Header, originalHeaders *http.
 		}
 	}
 
-	newHeaders := make(http.Header)
-
 	for headerKey, headerValue := range *originalHeaders {
 		renderedHeaderValueBytes, err := s.renderTemplateString(headerValue[0], templateInput, nil)
 		if err != nil {
 			return err
 		}
 
-		newHeaders.Set(headerKey, string(renderedHeaderValueBytes))
+		originalHeaders.Del(headerKey)
+		originalHeaders.Set(headerKey, string(renderedHeaderValueBytes))
 	}
 
-	originalHeaders = &newHeaders
 	return nil
 }
 
