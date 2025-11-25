@@ -1,4 +1,4 @@
-package proxy
+package template
 
 import (
 	"encoding/json"
@@ -23,7 +23,7 @@ type Template struct {
 	permanentStorage map[string]string
 }
 
-func newTemplate(logger *log.Logger) *Template {
+func NewTemplate(logger *log.Logger) *Template {
 	t := &Template{
 		logger:           logger,
 		permanentStorage: make(map[string]string),
@@ -32,7 +32,7 @@ func newTemplate(logger *log.Logger) *Template {
 	return t
 }
 
-func (t *Template) functionsWithStorage(temporaryStorage map[string]string) template.FuncMap {
+func (t *Template) FunctionsWithStorage(temporaryStorage map[string]string) template.FuncMap {
 	return template.FuncMap{
 		"toJson": func(v any) string {
 			b, err := json.Marshal(v)

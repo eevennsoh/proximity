@@ -7,6 +7,7 @@ import (
 	"net/url"
 
 	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
+	"bitbucket.org/atlassian-developers/mini-proxy/internal/template"
 
 	"github.com/go-chi/chi"
 )
@@ -17,7 +18,7 @@ type server struct {
 	router     *chi.Mux
 	httpServer *http.Server
 
-	template *Template
+	template *template.Template
 }
 
 func New(options Options) Interface {
@@ -32,7 +33,7 @@ func New(options Options) Interface {
 		Options:    options,
 		router:     router,
 		httpServer: httpServer,
-		template:   newTemplate(options.Logger),
+		template:   template.NewTemplate(options.Logger),
 	}
 }
 

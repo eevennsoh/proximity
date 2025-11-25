@@ -338,7 +338,7 @@ func (s *server) overrideResponseBody(res *http.Response, templateInput map[stri
 }
 
 func (s *server) renderTemplateString(templateStr string, templateInput map[string]any, storage map[string]string) ([]byte, error) {
-	tmpl, err := template.New("body").Funcs(s.template.functionsWithStorage(storage)).Parse(templateStr)
+	tmpl, err := template.New("body").Funcs(s.template.FunctionsWithStorage(storage)).Parse(templateStr)
 	if err != nil {
 		return nil, err
 	}

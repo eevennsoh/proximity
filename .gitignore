@@ -2,6 +2,7 @@
 vendor/
 config-dev.yaml
 proximity-*.tar.gz
+.DS_Store
 
 build/bin
 node_modules
