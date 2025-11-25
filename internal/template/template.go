@@ -6,6 +6,7 @@ import (
 	"log"
 	"os/exec"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -98,6 +99,21 @@ func (t *Template) FunctionsWithStorage(temporaryStorage map[string]string) temp
 		},
 		"subtract": func(a, b int) int {
 			return a - b
+		},
+		"regexFind": func(pattern, s string) (string, error) {
+			re, err := regexp.Compile(pattern)
+			if err != nil {
+				return "", err
+			}
+
+			matches := re.FindStringSubmatch(s)
+
+			// Only expects a single capture group
+			if len(matches) > 1 {
+				return matches[1], nil
+			}
+
+			return "", nil
 		},
 		"slauthtoken": func(groups string, audience string, environment string) string {
 			t.mu.RLock()

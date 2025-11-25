@@ -286,10 +286,28 @@ overrides:
                         {{- range $contentMsg := $msg.content }}
                           {{- if not $firstContentMsg }},{{ end }}
                           {{- $firstContentMsg = false }}
+
+                          {{- if eq $contentMsg.type "text" }}
+                          {
+                            "type": "text",
+                            "text": "{{ safeEncode (index $contentMsg $contentMsg.type) }}"
+                          }
+                          {{- else if or (eq $contentMsg.type "image_url") (eq $contentMsg.type "input_image") }}
+                          {
+                            "type": "image",
+                            "source": {
+                              "type": "base64",
+                              "media_type": "{{ regexFind "^.+:(image/.+?);.+$" $contentMsg.image_url.url }}",
+                              "data": "{{ regexFind "^.+?,(.+)$" $contentMsg.image_url.url }}"
+                            }
+                          }
+                          {{- else }}
                           {
                             "type": "{{ $contentMsg.type }}",
                             "{{ $contentMsg.type }}": "{{ safeEncode (index $contentMsg $contentMsg.type) }}"
                           }
+                          {{- end }}
+
                         {{- end }}
                       ]
                       {{- end }}
