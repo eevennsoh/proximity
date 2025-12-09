@@ -97,6 +97,9 @@ func (t *Template) FunctionsWithStorage(temporaryStorage map[string]string) temp
 
 			return fmt.Sprintf("%d", total)
 		},
+		"str": func(val any) string {
+			return fmt.Sprint(val)
+		},
 		"subtract": func(a, b int) int {
 			return a - b
 		},

@@ -7,40 +7,77 @@ supportedUris:
 
   - in: /openai/v1/chat/completions
     out: /v1/openai/v1/chat/completions
+    methods:
+      - POST
 
   - in: /openai/v1/responses
     out: /v1/openai/v1/responses
+    methods:
+      - POST
 
+  - in: /openai/v1/images/generations
+    out: /v1/openai/v1/images/generations
+    methods:
+      - POST
+
+  # If out is not defined then no request is forwarded, instead a complete response
+  # must be provided in the config for this.
   - in: /openai/v1/models
+    methods:
+      - GET
 
   # ******* CLAUDE ******* #
 
   - in: /bedrock/claude/v1/messages
     out: |
       /v1/bedrock/model/{{ normalize .body.model "anthropic." "-v1:0" }}/invoke{{- if .body.stream -}}-with-response-stream{{- end -}}
+    methods:
+      - POST
+
+  - in: /bedrock/claude/v1/messages
+    methods:
+      - OPTIONS
+
+  - in: /bedrock/claude/models
+    methods:
+      - GET
 
   - in: /bedrock/claude/v1/models
+    methods:
+      - GET
 
-  # Claude Bedrock direct model invocation endpoints
+  # Claude Code direct model invocation endpoints
   - in: /bedrock/claude/v1/model/{model}/invoke
     out: /v1/bedrock/model/{{ trim .pathParams.model "us." "" }}/invoke
+    methods:
+      - POST
 
   - in: /bedrock/claude/v1/model/{model}/invoke-with-response-stream
     out: /v1/bedrock/model/{{ trim .pathParams.model "us." "" }}/invoke-with-response-stream
+    methods:
+      - POST
 
   - in: /provider/bedrock/format/openai/v1/chat/completions
     out: |
       /v1/bedrock/model/{{ normalize .body.model "anthropic." "-v1:0" }}/invoke{{- if .body.stream -}}-with-response-stream{{- end -}}
+    methods:
+      - POST
 
   - in: /provider/bedrock/format/openai/v1/models
+    methods:
+      - GET
 
   # ******* GEMINI ******* #
 
   - in: /google/gemini/v1beta/models/{model}:generateContent
     out: /v1/google/v1/publishers/google/models/{{ .pathParams.model }}:generateContent
+    methods:
+      - POST
 
   - in: /google/gemini/v1beta/models/{model}:streamGenerateContent
     out: /v1/google/v1/publishers/google/models/{{ .pathParams.model }}:streamGenerateContent
+    methods:
+      - POST
 
 overrides:
   global:
@@ -65,375 +102,514 @@ overrides:
           name: Authorization
           text: 'slauth {{ slauthtoken (.settings.adGroup) "ai-gateway" "staging" }}'
 
-      response:
-        headers: []
+    response:
+      headers:
+        - op: remove
+
+        # Default Content-Type to be updated by individual endpoints if necessary
+        - op: add
+          name: Content-Type
+          text: application/json
 
   uris:
-    # Generate the entire response to mimick an upstream OpenAI endpoint. This
-    # is done because AI-Gateway does not provide this endpoint.
-    /openai/v1/models:
-      response:
-        headers:
-          - op: add
-            name: Content-Type
-            text: application/json
-
-        body:
-          template: |
-            {
-              "object": "list",
-              "data": [
+    /openai/v1/chat/completions:
+      POST:
+        request:
+          body:
+            template: |
+              {
                 {{- $first := true }}
-                {{- range $model := .external.openai }}
-                {{- if not $first }},{{ end }}
-                {{- $first = false }}
-                {
-                  "id": "{{ $model }}",
-                  "object": "model",
-                  "created": {{ timestamp }},
-                  "owned_by": "atlassian"
-                }
+                {{- range $k, $v := .body }}
+                  {{- if not $first }},{{ end }}
+                  {{- $first = false }}
+                  {{- if eq $k "max_tokens" }}
+                    "max_completion_tokens": {{ toJson $v }}
+                  {{- else }}
+                    "{{ $k }}": {{ toJson $v }}
+                  {{- end }}
                 {{- end }}
-              ]
-            }
+              }
+
+    /openai/v1/models:
+      GET:
+        response:
+          body:
+            template: |
+              {
+                "object": "list",
+                "data": [
+                  {{- $first := true }}
+                  {{- range $model := .external.openai }}
+                  {{- if not $first }},{{ end }}
+                  {{- $first = false }}
+                  {
+                    "id": "{{ $model }}",
+                    "object": "model",
+                    "created": {{ timestamp }},
+                    "owned_by": "atlassian"
+                  }
+                  {{- end }}
+                ]
+              }
+
 
     # Use the Bedrock provider. All models can be accessed through the proxy
     # using the anthropic claude format.
     /bedrock/claude/v1/messages:
-      request:
-        headers:
-          # The bedrock api requires the anthropic version in the body rather
-          # than as a header like the anthropic api so the header needs to be
-          # removed.
-          - op: remove
-            name: anthropic-version
+      OPTIONS:
+        response:
+          statusCode: 204
 
-          # No need for this when using AI-Gateway
-          - op: remove
-            name: x-api-key
-        body:
-          template: |
-            {
-              {{- $first := true }}
-              {{- range $k, $v := .body }}
-              {{- if and (ne $k "model") (ne $k "stream") (ne $k "messages") }}
-                {{- if not $first }},{{ end }}
-                "{{ $k }}": {{ toJson $v }}
-                {{- $first = false }}
-              {{- end }}
-              {{- end }},
-              {{/* The bedrock api requires the anthropic version in the json body */}}
-              "anthropic_version": "bedrock-2023-05-31",
-              "messages": [
-                {{- $firstMsg := true }}
-                {{- range $msg := .body.messages }}
-                  {{- if not $firstMsg }},{{ end }}
-                  {{- $firstMsg = false }}
-                  {{- if eq (getType $msg.content) "string" }}
-                    {
-                      "role": "{{ $msg.role }}",
-                      "content": [
-                        {
-                          "type": "text",
-                          "text": "{{ safeEncode $msg.content }}"
-                        }
-                      ]
-                    }
-                  {{- else }}
-                    {{ toJson $msg }}
-                  {{- end }}
-                {{- end }}
-              ]
-            }
+          headers:
+            - op: add
+              name: Access-Control-Allow-Origin
+              text: "*"
+            - op: add
+              name: Access-Control-Allow-Methods
+              text: POST, OPTIONS
+            - op: add
+              name: Access-Control-Allow-Headers
+              text: "*"
+            - op: add
+              name: Access-Control-Max-Age
+              text: "86400"
 
-      response:
-        body:
-          # TODO: add body response templating
-          template: |
-            {{- /* differentiate between whether the response is returned as an event stream or a full response */}}
-            {{- if .event }}
-              {{- if eq .event.type "message_stop" }}
-                { "type": "message_stop" }
-              {{- else if eq .event.type "message_start" }}
-                {
-                  "type": "message_start",
-                  "usage": {
-                    "input_tokens": {{ .event.message.usage.input_tokens }},
-                    "output_tokens": {{ .event.message.usage.output_tokens }}
-                  }
-                }
-              {{- else }}
-                {{ toJson .event }}
-              {{- end }}
-            {{- end }}
+          body:
+            template: |
+              {
+                "methods": ["POST", "OPTIONS"],
+                "description": "Supported methods for this endpoint"
+              }
 
-    /bedrock/claude/v1/models:
-      response:
-        headers:
-          - op: add
-            name: Content-Type
-            text: application/json
+      POST:
+        request:
+          headers:
+            # The bedrock api requires the anthropic version in the body rather
+            # than as a header like the anthropic api so the header needs to be
+            # removed.
+            - op: remove
+              name: anthropic-version
 
-        body:
-          template: |
-            {
-              "data": [
+            # No need for this when using AI-Gateway
+            - op: remove
+              name: x-api-key
+
+          body:
+            template: |
+              {
                 {{- $first := true }}
-                {{- range $model := .external.anthropic }}
-                {{- if not $first }},{{ end }}
-                {{- $first = false }}
-                {
-                  "created_at": "{{ formattedTimestamp "2006-01-02T15:04:05Z" }}",
-                  "display_name": "{{ $model }}",
-                  "id": "{{ $model }}",
-                  "type": "model"
-                }
+                {{- range $k, $v := .body }}
+                {{- if and (ne $k "model") (ne $k "stream") (ne $k "messages") }}
+                  {{- if not $first }},{{ end }}
+                  "{{ $k }}": {{ toJson $v }}
+                  {{- $first = false }}
                 {{- end }}
-              ],
-              "first_id": "{{ index .external.anthropic 0 }}",
-              "has_more": false,
-              "last_id": "{{ index .external.anthropic (subtract (len .external.anthropic) 1) }}"
-            }
-
-    /provider/bedrock/format/openai/v1/chat/completions:
-      request:
-        body:
-          template: |
-            {
-              "anthropic_version": "bedrock-2023-05-31",
-
-              {{- /* set max tokens if max_tokens or max_completion_tokens are defined */}}
-              {{- if .body.max_tokens }}
-              "max_tokens": {{ .body.max_tokens }},
-              {{- else if .body.max_completion_tokens }}
-              "max_tokens": {{ .body.max_completion_tokens }},
-              {{- else}}
-              "max_tokens": 8192,
-              {{- end }}
-
-              {{- /* system prompt: first message with role == "system" */}}
-              {{- range $i, $msg := .body.messages }}
-                {{- if and (eq $msg.role "system") (eq $i 0) }}
-                  "system": "{{ safeEncode $msg.content }}",
-                {{- end }}
-              {{- end }}
-
-              {{- if .body.tools }}
-              "tools": [
-                {{- $firstTool := true }}
-                {{- range $tool := .body.tools }}
-                  {{- if eq $tool.type "function" }}
-                    {{- if not $firstTool }},{{ end }}
-                    {
-                      "name": "{{ $tool.function.name }}",
-                      "description": "{{ safeEncode $tool.function.description }}",
-                      "input_schema": {{ toJson $tool.function.parameters }}
-                    }
-                    {{- $firstTool = false }}
-                  {{- end }}
-                {{- end }}
-              ],
-              {{- end }}
-
-              {{- if .body.tool_choice }}
-              "tool_choice": {
-              {{- if eq (getType .body.tool_choice) "string" -}}
-                {{- if eq .body.tool_choice "auto" }}
-                  "type": "auto"
-                {{- else }}
-                  "type": "any"
-                {{- end }}
-              {{- else }}
-                "type": "tool",
-                "name": "{{ .body.tool_choice.function.name }}"
-              {{- end }}
-              },
-              {{- end }}
-
-              {{- if .body.temperature }}
-              "temperature": {{ .body.temperature }},
-              {{- end }}
-              {{- if .body.top_p }}
-              "top_p": {{ .body.top_p }},
-              {{- end }}
-
-              {{- if .body.stop }}
-                {{- if eq (getType .body.stop) "string" }}
-                  "stop_sequences": [ "{{ .body.stop }}" ]
-                {{- else if eq (getType .body.stop) "slice" }}
-                  "stop_sequences": {{ toJson .body.stop }}
-                {{- end }}
-              {{- end }}
-
-              "messages": [
-                {{- $firstMsg := true }}
-                {{- range $msg := .body.messages }}
-                  {{- if ne $msg.role "system" }}
+                {{- end }},
+                {{/* The bedrock api requires the anthropic version in the json body */}}
+                "anthropic_version": "bedrock-2023-05-31",
+                "messages": [
+                  {{- $firstMsg := true }}
+                  {{- range $msg := .body.messages }}
                     {{- if not $firstMsg }},{{ end }}
                     {{- $firstMsg = false }}
-                    {
-                      "role": "{{ $msg.role }}",
-                      {{- if eq (getType $msg.content) "string" }}
-                      "content": [
-                        {
-                          "type": "text",
-                          "text": "{{ safeEncode $msg.content }}"
-                        }
-                      ]
-                      {{- else }}
-                      "content": [
-                        {{- $firstContentMsg := true }}
-                        {{- range $contentMsg := $msg.content }}
-                          {{- if not $firstContentMsg }},{{ end }}
-                          {{- $firstContentMsg = false }}
-
-                          {{- if eq $contentMsg.type "text" }}
+                    {{- if eq (getType $msg.content) "string" }}
+                      {
+                        "role": "{{ $msg.role }}",
+                        "content": [
                           {
                             "type": "text",
-                            "text": "{{ safeEncode (index $contentMsg $contentMsg.type) }}"
+                            "text": "{{ safeEncode $msg.content }}"
                           }
-                          {{- else if or (eq $contentMsg.type "image_url") (eq $contentMsg.type "input_image") }}
-                          {
-                            "type": "image",
-                            "source": {
-                              "type": "base64",
-                              "media_type": "{{ regexFind "^.+:(image/.+?);.+$" $contentMsg.image_url.url }}",
-                              "data": "{{ regexFind "^.+?,(.+)$" $contentMsg.image_url.url }}"
-                            }
-                          }
-                          {{- else }}
-                          {
-                            "type": "{{ $contentMsg.type }}",
-                            "{{ $contentMsg.type }}": "{{ safeEncode (index $contentMsg $contentMsg.type) }}"
-                          }
-                          {{- end }}
+                        ]
+                      }
+                    {{- else }}
+                      {{ toJson $msg }}
+                    {{- end }}
+                  {{- end }}
+                ]
+              }
 
-                        {{- end }}
-                      ]
-                      {{- end }}
-                    }
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              text: "{{ index (index .headers \"Content-Type\") 0 }}"
+            - op: add
+              name: Access-Control-Allow-Origin
+              text: "*"
+
+          body:
+            template: |
+              {{- /* differentiate between whether the response is returned as an event stream or a full response */}}
+              {{- if .event }}
+                {{- if eq .event.type "message_stop" }}
+                  { "type": "message_stop" }
+                {{- else }}
+                  {{ toJson .event }}
+                {{- end }}
+              {{- else }}
+                {{ toJson .body }}
+              {{- end }}
+
+
+    /bedrock/claude/models:
+      GET:
+        response:
+          statusCode: 200
+
+          body:
+            template: |
+              {
+                "data": [
+                  {{- $first := true }}
+                  {{- range $model := .external.anthropic }}
+                  {{- if not $first }},{{ end }}
+                  {{- $first = false }}
+                  {
+                    "created_at": "{{ formattedTimestamp "2006-01-02T15:04:05Z" }}",
+                    "display_name": "{{ $model }}",
+                    "id": "{{ $model }}",
+                    "type": "model"
+                  }
+                  {{- end }}
+                ],
+                "first_id": "{{ index .external.anthropic 0 }}",
+                "has_more": false,
+                "last_id": "{{ index .external.anthropic (subtract (len .external.anthropic) 1) }}"
+              }
+
+
+    /bedrock/claude/v1/models:
+      GET:
+        response:
+          statusCode: 200
+
+          body:
+            template: |
+              {
+                "data": [
+                  {{- $first := true }}
+                  {{- range $model := .external.anthropic }}
+                  {{- if not $first }},{{ end }}
+                  {{- $first = false }}
+                  {
+                    "created_at": "{{ formattedTimestamp "2006-01-02T15:04:05Z" }}",
+                    "display_name": "{{ $model }}",
+                    "id": "{{ $model }}",
+                    "type": "model"
+                  }
+                  {{- end }}
+                ],
+                "first_id": "{{ index .external.anthropic 0 }}",
+                "has_more": false,
+                "last_id": "{{ index .external.anthropic (subtract (len .external.anthropic) 1) }}"
+              }
+
+
+    /provider/bedrock/format/openai/v1/chat/completions:
+      POST:
+        request:
+          body:
+            template: |
+              {
+                "anthropic_version": "bedrock-2023-05-31",
+
+                {{- /* set max tokens if max_tokens or max_completion_tokens are defined */}}
+                {{- if .body.max_tokens }}
+                "max_tokens": {{ .body.max_tokens }},
+                {{- else if .body.max_completion_tokens }}
+                "max_tokens": {{ .body.max_completion_tokens }},
+                {{- else}}
+                "max_tokens": 8192,
+                {{- end }}
+
+                {{- /* system prompt: first message with role == "system" */}}
+                {{- range $i, $msg := .body.messages }}
+                  {{- if and (eq $msg.role "system") (eq $i 0) }}
+                    "system": "{{ safeEncode $msg.content }}",
                   {{- end }}
                 {{- end }}
-              ]
-            }
 
-      response:
-        body:
-          template: |
-            {{- if .event }}
-              {
-                "object": "chat.completion.chunk",
-                "created": {{ timestamp }},
-                "service_tier": "scale",
-                "system_fingerprint": null,
-
-              {{- if eq .event.type "message_start" }}
-
-                {{ set "requestId" .event.message.id }}
-                {{ set "model" .event.message.model }}
-                {{ set "role" .event.message.role }}
-                {{ set "input_tokens" .event.message.usage.input_tokens }}
-                {{ set "output_tokens" .event.message.usage.output_tokens }}
-
-                "id": "{{ .event.message.id }}",
-                "model": "{{ .event.message.model }}",
-
-                "choices": [
-                  {
-                    "index": 0,
-                    "delta": {
-                      "role": "assistant",
-                      "content": ""
-                    },
-                    "logprobs": null,
-                    "finish_reason": null
-                  }
+                {{- if .body.tools }}
+                "tools": [
+                  {{- $firstTool := true }}
+                  {{- range $tool := .body.tools }}
+                    {{- if eq $tool.type "function" }}
+                      {{- if not $firstTool }},{{ end }}
+                      {
+                        "name": "{{ $tool.function.name }}",
+                        "description": "{{ safeEncode $tool.function.description }}",
+                        "input_schema": {{ toJson $tool.function.parameters }}
+                      }
+                      {{- $firstTool = false }}
+                    {{- end }}
+                  {{- end }}
                 ],
-                "usage": null
+                {{- end }}
 
-              {{- else if or (eq .event.type "content_block_start") (eq .event.type "content_block_stop") (eq .event.type "message_delta") }}
+                {{- if .body.tool_choice }}
+                "tool_choice": {
+                {{- if eq (getType .body.tool_choice) "string" -}}
+                  {{- if eq .body.tool_choice "auto" }}
+                    "type": "auto"
+                  {{- else }}
+                    "type": "any"
+                  {{- end }}
+                {{- else }}
+                  "type": "tool",
+                  "name": "{{ .body.tool_choice.function.name }}"
+                {{- end }}
+                },
+                {{- end }}
 
-                "id": "{{ get "requestId" }}",
-                "model": "{{ get "model" }}",
+                {{- if .body.temperature }}
+                "temperature": {{ .body.temperature }},
+                {{- end }}
+                {{- if .body.top_p }}
+                "top_p": {{ .body.top_p }},
+                {{- end }}
 
-                "choices": [
-                  {
-                    "index": 0,
-                    "delta": {
-                      "role": "assistant",
-                      "content": ""
+                {{- if .body.stop }}
+                  {{- if eq (getType .body.stop) "string" }}
+                    "stop_sequences": [ "{{ .body.stop }}" ],
+                  {{- else if eq (getType .body.stop) "slice" }}
+                    "stop_sequences": {{ toJson .body.stop }},
+                  {{- end }}
+                {{- end }}
+
+                "messages": [
+                  {{- $firstMsg := true }}
+                  {{- range $msg := .body.messages }}
+                    {{- if ne $msg.role "system" }}
+                      {{- if not $firstMsg }},{{ end }}
+                      {{- $firstMsg = false }}
+                      {
+                        {{- if eq $msg.role "tool" }}
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "tool_result",
+                              "tool_use_id": "{{ $msg.tool_call_id }}",
+                              "content": "{{ safeEncode $msg.content }}"
+                            }
+                          ]
+                        {{- else if $msg.tool_calls }}
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "tool_use",
+                              "id": "{{( index $msg.tool_calls 0).id }}",
+                              "name": "{{ (index $msg.tool_calls 0).function.name }}",
+                              "input": {{ (index $msg.tool_calls 0).function.arguments }}
+                            }
+                          ]
+                        {{- else if eq (getType $msg.content) "string" }}
+                          "role": "{{ $msg.role }}",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "{{ safeEncode $msg.content }}"
+                            }
+                          ]
+                        {{- else }}
+                          "role": "{{ $msg.role }}",
+                          "content": [
+                            {{- $firstContentMsg := true }}
+                            {{- range $contentMsg := $msg.content }}
+                              {{- if not $firstContentMsg }},{{ end }}
+                              {{- $firstContentMsg = false }}
+
+                              {{- if eq $contentMsg.type "text" }}
+                              {
+                                "type": "text",
+                                "text": "{{ safeEncode (index $contentMsg $contentMsg.type) }}"
+                              }
+                              {{- else if or (eq $contentMsg.type "image_url") (eq $contentMsg.type "input_image") }}
+                              {
+                                "type": "image",
+                                "source": {
+                                  "type": "base64",
+                                  "media_type": "{{ regexFind "^.+:(image/.+?);.+$" $contentMsg.image_url.url }}",
+                                  "data": "{{ regexFind "^.+?,(.+)$" $contentMsg.image_url.url }}"
+                                }
+                              }
+                              {{- end }}
+                            {{- end }}
+                          ]
+                        {{- end }}
+                      }
+                    {{- end }}
+                  {{- end }}
+                ]
+              }
+
+        response:
+          body:
+            template: |
+              {{- if .event }}
+                {
+                  "object": "chat.completion.chunk",
+                  "created": {{ timestamp }},
+                  "service_tier": "scale",
+                  "system_fingerprint": null,
+
+                {{- if eq .event.type "message_start" }}
+
+                  {{ set "requestId" .event.message.id }}
+                  {{ set "model" .event.message.model }}
+                  {{ set "role" .event.message.role }}
+                  {{ set "input_tokens" .event.message.usage.input_tokens }}
+                  {{ set "output_tokens" .event.message.usage.output_tokens }}
+
+                  "id": "{{ .event.message.id }}",
+                  "model": "{{ .event.message.model }}",
+
+                  "choices": [
+                    {
+                      "index": 0,
+                      "delta": {
+                        "role": "assistant",
+                        "content": ""
+                      },
+                      "logprobs": null,
+                      "finish_reason": null
+                    }
+                  ],
+                  "usage": null
+
+                {{- else if or (eq .event.type "content_block_start") (eq .event.type "content_block_stop") (eq .event.type "message_delta") }}
+
+                  "id": "{{ get "requestId" }}",
+                  "model": "{{ get "model" }}",
+
+                  "choices": [
+                    {
+                      "index": 0,
+                      "delta": {
+                        "role": "assistant",
+                        "content": ""
+                      },
+                      "logprobs": null,
+                      "finish_reason": null
+                    }
+                  ],
+                  "usage": null
+
+                {{- else if eq .event.type "message_stop" }}
+
+                  "id": "{{ get "requestId" }}",
+                  "model": "{{ get "model" }}",
+
+                  "choices": [],
+                  "usage": {
+                    "prompt_tokens": {{ get "input_tokens" }},
+                    "completion_tokens": {{ get "output_tokens" }},
+                    "total_tokens": {{ sum (get "input_tokens") (get "output_tokens") }},
+                    "prompt_tokens_details": {
+                        "cached_tokens": 0,
+                        "audio_tokens": 0
                     },
-                    "logprobs": null,
-                    "finish_reason": null
+                    "completion_tokens_details": {
+                        "reasoning_tokens": 0,
+                        "audio_tokens": 0,
+                        "accepted_prediction_tokens": 0,
+                        "rejected_prediction_tokens": 0
+                    }
                   }
-                ],
-                "usage": null
 
-              {{- else if eq .event.type "message_stop" }}
+                {{- else }}
 
-                "id": "{{ get "requestId" }}",
-                "model": "{{ get "model" }}",
+                  "id": "{{ get "requestId" }}",
+                  "model": "{{ get "model" }}",
 
-                "choices": [],
-                "usage": {
-                  "prompt_tokens": {{ get "input_tokens" }},
-                  "completion_tokens": {{ get "output_tokens" }},
-                  "total_tokens": {{ sum (get "input_tokens") (get "output_tokens") }},
-                  "prompt_tokens_details": {
-                      "cached_tokens": 0,
-                      "audio_tokens": 0
-                  },
-                  "completion_tokens_details": {
+                  "choices": [
+                    {
+                      "index": 0,
+                      "delta": {
+                        "content": "{{ safeEncode .event.delta.text }}"
+                      },
+                      "logprobs": null,
+                      "finish_reason": null
+                    }
+                  ],
+                  "usage": null
+
+                {{- end }}
+                }
+              {{- else }}
+                {
+                  "id": "{{ .body.id }}",
+                  "object": "chat.completion",
+                  "created": {{ timestamp }},
+                  "model": "{{ .body.model }}",
+                  "choices": [
+                  {{- $lastIndex := subtract (len .body.content) 1 }}
+                  {{- $first := true }}
+                  {{- range $index, $message := .body.content }}
+                  {{- if not $first }},{{ end }}
+                  {{- $first = false }}
+                    {
+                      "index": {{ $index }},
+                      {{- if eq $index $lastIndex }}
+                      "finish_reason": "{{ if eq .body.stop_reason "end_turn" }}stop{{- end }}",
+                      {{- end }}
+                      {{- if eq $message.type "text" }}
+                      "message": {
+                        "role": "assistant",
+                        "content": "{{ $message.text }}"
+                      },
+                      {{- else if eq $message.type "tool_use" }}
+                      "message": {
+                        "role": "assistant",
+                        "tool_calls": [
+                          {
+                            "id": "{{ $message.id }}",
+                            "type": "function",
+                            "function": {
+                              "name": "{{ $message.name }}",
+                              "arguments": "{{ safeEncode (toJson $message.input) }}"
+                            }
+                          }
+                        ]
+                      },
+                      {{- end }}
+                      "logprobs": null
+                    }
+                  {{- end }}
+                  ],
+                  "usage": {
+                    "prompt_tokens": {{ .body.usage.input_tokens }},
+                    "completion_tokens": {{ .body.usage.output_tokens }},
+                    "total_tokens": {{ sum (str .body.usage.input_tokens) (str .body.usage.output_tokens) }},
+                    "completion_tokens_details": {
                       "reasoning_tokens": 0,
                       "audio_tokens": 0,
                       "accepted_prediction_tokens": 0,
                       "rejected_prediction_tokens": 0
-                  }
+                    }
+                  },
+                  "service_tier": "default"
                 }
-
-              {{- else }}
-
-                "id": "{{ get "requestId" }}",
-                "model": "{{ get "model" }}",
-
-                "choices": [
-                  {
-                    "index": 0,
-                    "delta": {
-                      "content": "{{ safeEncode .event.delta.text }}"
-                    },
-                    "logprobs": null,
-                    "finish_reason": null
-                  }
-                ],
-                "usage": null
-
               {{- end }}
-              }
-            {{- end }}
 
     /provider/bedrock/format/openai/v1/models:
-      response:
-        headers:
-          - op: add
-            name: Content-Type
-            text: application/json
-
-        body:
-          template: |
-            {
-              "object": "list",
-              "data": [
-                {{- $first := true }}
-                {{- range $model := .external.anthropic }}
-                {{- if not $first }},{{ end }}
-                {{- $first = false }}
-                {
-                  "id": "{{ $model }}",
-                  "object": "model",
-                  "created": {{ timestamp }},
-                  "owned_by": "atlassian"
-                }
-                {{- end }}
-              ]
-            }
+      GET:
+        request:
+          body:
+            template: |
+              {
+                "object": "list",
+                "data": [
+                  {{- $first := true }}
+                  {{- range $model := .external.anthropic }}
+                  {{- if not $first }},{{ end }}
+                  {{- $first = false }}
+                  {
+                    "id": "{{ $model }}",
+                    "object": "model",
+                    "created": {{ timestamp }},
+                    "owned_by": "atlassian"
+                  }
+                  {{- end }}
+                ]
+              }

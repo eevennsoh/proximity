@@ -8,7 +8,6 @@ import (
 	"errors"
 	"io"
 	"log"
-	"os"
 	"strings"
 	"sync"
 
@@ -27,18 +26,20 @@ type App struct {
 	logs    bytes.Buffer
 
 	proxy             proxy.Interface
-	config            string
 	templateVariables string
 	port              int
+
+	configPath string
+	config     *config.Config
 
 	settingsPath string
 	settings     *settings.Struct
 }
 
 // NewApp creates a new App application struct
-func NewApp(config, templateVariables string, port int, settingsPath string) *App {
+func NewApp(configPath, templateVariables string, port int, settingsPath string) *App {
 	return &App{
-		config:            config,
+		configPath:        configPath,
 		templateVariables: templateVariables,
 		port:              port,
 		settingsPath:      settingsPath,
@@ -57,6 +58,11 @@ func (a *App) Startup(ctx context.Context) {
 	if err != nil {
 		log.Printf("Failed to read settings: %v", err)
 		return
+	}
+
+	a.config, err = config.ReadConfig(a.configPath)
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	if a.settings.AutoStartProxy {
@@ -78,11 +84,6 @@ func (a *App) StartProxy() error {
 
 	a.logs.Reset()
 
-	cfg, err := config.ReadConfig(a.config)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	templateVariables, err := readTemplateVariables(a.templateVariables)
 	if err != nil {
 		log.Fatal(err)
@@ -96,7 +97,7 @@ func (a *App) StartProxy() error {
 		Port:              a.port,
 		TestMode:          false,
 		Logger:            logger,
-		Config:            cfg,
+		Config:            a.config,
 		Settings:          a.settings,
 		TemplateVariables: templateVariables,
 	})
@@ -150,48 +151,17 @@ func (a *App) ClearLogs() {
 	wruntime.EventsEmit(a.ctx, "proxy:log:cleared")
 }
 
-// Endpoints structures returned to the frontend
-type Endpoint struct {
-	In  string `json:"in"`
-	Out string `json:"out"`
-}
-
+// EndpointsResponse is the structure returned to the frontend
 type EndpointsResponse struct {
-	BaseEndpoint string     `json:"baseEndpoint"`
-	Endpoints    []Endpoint `json:"endpoints"`
+	BaseEndpoint string          `json:"baseEndpoint"`
+	Endpoints    []config.UriMap `json:"endpoints"`
 }
 
 // GetEndpoints returns the configured base endpoint and supported URI mappings.
-// It prefers the embedded/base64 config if available; otherwise falls back to reading config.yaml from disk.
 func (a *App) GetEndpoints() (*EndpointsResponse, error) {
-	var cfg *config.Config
-	var err error
-
-	if strings.TrimSpace(a.config) != "" {
-		cfg, err = config.ReadConfig(a.config)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		data, readErr := os.ReadFile("config.yaml")
-		if readErr != nil {
-			return nil, readErr
-		}
-		b64 := base64.StdEncoding.EncodeToString(data)
-		cfg, err = config.ReadConfig(b64)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	eps := make([]Endpoint, 0, len(cfg.SupportedUris))
-	for _, um := range cfg.SupportedUris {
-		eps = append(eps, Endpoint{In: um.In, Out: um.Out})
-	}
-
 	return &EndpointsResponse{
-		BaseEndpoint: cfg.BaseEndpoint,
-		Endpoints:    eps,
+		BaseEndpoint: a.config.BaseEndpoint,
+		Endpoints:    a.config.SupportedUris,
 	}, nil
 }
 

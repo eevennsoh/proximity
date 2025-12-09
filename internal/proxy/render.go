@@ -50,7 +50,7 @@ func (s *server) renderRequest(req *http.Request, cfg *endpointProxyConfig, temp
 
 // renderResponse applies all config-driven transformations to the response and returns a new http.Reponse.
 func (s *server) renderResponse(res *http.Response, cfg *endpointProxyConfig, templateInput map[string]any) error {
-	if err := s.overrideHeaders(cfg.Request.Headers, &res.Header, templateInput); err != nil {
+	if err := s.overrideHeaders(cfg.Response.Headers, &res.Header, templateInput); err != nil {
 		return err
 	}
 
@@ -131,7 +131,7 @@ func copyBody(body *io.ReadCloser) ([]byte, error) {
 // for routes than they aren't included in.
 func (s *server) overrideHeaders(headers []config.Header, originalHeaders *http.Header, templateInput map[string]any) error {
 	for _, headerOperation := range headers {
-		if err := s.overrideHeader(headerOperation, originalHeaders, templateInput); err != nil {
+		if err := s.overrideHeader(headerOperation, originalHeaders); err != nil {
 			return err
 		}
 	}
@@ -151,7 +151,7 @@ func (s *server) overrideHeaders(headers []config.Header, originalHeaders *http.
 
 // overrideHeader modifies the HTTP request headers based on the provided configuration.
 // It can remove headers, set header values from text or file, or clear all headers except "Content-Length".
-func (s *server) overrideHeader(header config.Header, originalHeaders *http.Header, templateInput map[string]any) error {
+func (s *server) overrideHeader(header config.Header, originalHeaders *http.Header) error {
 	if header.Operation == config.RemoveOperation {
 		if header.Name != "" {
 			originalHeaders.Del(header.Name)

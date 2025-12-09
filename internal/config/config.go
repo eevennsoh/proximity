@@ -21,14 +21,18 @@ type Config struct {
 }
 
 type UriMap struct {
-	In           string `yaml:"in"`
-	Out          string `yaml:"out"`
-	BaseEndpoint string `yaml:"baseEndpoint"`
+	In           string   `yaml:"in" json:"in"`
+	Out          string   `yaml:"out" json:"out"`
+	BaseEndpoint string   `yaml:"baseEndpoint" json:"baseEndpoint,omitempty"`
+	Methods      []string `yaml:"methods" json:"methods,omitempty"`
 }
 
 type Overrides struct {
-	Global RequestResponse            `yaml:"global"`
-	Uris   map[string]RequestResponse `yaml:"uris"`
+	Global RequestResponse `yaml:"global"`
+
+	// First layer is route
+	// Second layer is http method
+	Uris map[string]map[string]RequestResponse `yaml:"uris"`
 }
 
 type RequestResponse struct {
@@ -37,8 +41,10 @@ type RequestResponse struct {
 }
 
 type OverrideConfig struct {
-	Headers []Header `yaml:"headers"`
-	Body    Body     `yaml:"body"`
+	// StatusCode is only used if uriMap.Out is not defined, otherwise it forwards the upstream response status code
+	StatusCode int      `yaml:"statusCode"`
+	Headers    []Header `yaml:"headers"`
+	Body       Body     `yaml:"body"`
 }
 
 type Header struct {

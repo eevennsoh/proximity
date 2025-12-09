@@ -48,13 +48,15 @@ func (s *server) RunServer(ctx context.Context) {
 		})
 	})
 
-	for _, supportedUri := range s.SupportedUris {
-		endpointProxyCfg, err := s.buildEndpointProxyConfig(supportedUri)
-		if err != nil {
-			s.Logger.Fatal(err)
-		}
+	combinedUriConfigs, err := s.combineCommonUriConfigs()
+	if err != nil {
+		s.Logger.Fatal(err)
+	}
 
-		s.router.Handle(supportedUri.In, s.handleEndpoint(endpointProxyCfg))
+	for uri, endpointProxyCfgMap := range combinedUriConfigs {
+		for method, cfg := range endpointProxyCfgMap {
+			s.router.Method(method, uri, s.handleEndpoint(cfg))
+		}
 	}
 
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -67,7 +69,38 @@ func (s *server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-func (s *server) buildEndpointProxyConfig(uriMap config.UriMap) (*endpointProxyConfig, error) {
+func (s *server) combineCommonUriConfigs() (map[string]map[string]*endpointProxyConfig, error) {
+	combinedUriConfigs := make(map[string]map[string]*endpointProxyConfig)
+
+	for _, supportedUri := range s.SupportedUris {
+		endpointProxyCfgMap, err := s.buildEndpointProxyConfigs(supportedUri)
+		if err != nil {
+			return nil, err
+		}
+
+		existingEndpointProxyCfgMap, ok := combinedUriConfigs[supportedUri.In]
+		if !ok {
+			combinedUriConfigs[supportedUri.In] = endpointProxyCfgMap
+			continue
+		}
+
+		for httpMethod, endpointProxyCfg := range endpointProxyCfgMap {
+			if _, ok := existingEndpointProxyCfgMap[httpMethod]; ok {
+				return nil, fmt.Errorf("route %s has multiple uris configs mapped to the http method \"%s\"",
+					supportedUri.In, httpMethod,
+				)
+			}
+
+			existingEndpointProxyCfgMap[httpMethod] = endpointProxyCfg
+		}
+	}
+
+	return combinedUriConfigs, nil
+}
+
+func (s *server) buildEndpointProxyConfigs(uriMap config.UriMap) (map[string]*endpointProxyConfig, error) {
+	endpointProxyConfigMap := make(map[string]*endpointProxyConfig)
+
 	baseEndpoint := s.BaseEndpoint
 
 	if uriMap.BaseEndpoint != "" {
@@ -79,19 +112,27 @@ func (s *server) buildEndpointProxyConfig(uriMap config.UriMap) (*endpointProxyC
 		return nil, err
 	}
 
-	endpointProxyCfg := &endpointProxyConfig{
-		baseEndpoint:    target,
-		UriMap:          uriMap,
-		RequestResponse: s.Overrides.Global,
+	for _, httpMethod := range uriMap.Methods {
+		endpointProxyCfg := &endpointProxyConfig{
+			baseEndpoint:    target,
+			UriMap:          uriMap,
+			RequestResponse: s.Overrides.Global,
+		}
+
+		uriCfgMap, ok := s.Overrides.Uris[uriMap.In]
+		if !ok {
+			endpointProxyConfigMap[httpMethod] = endpointProxyCfg
+			continue
+		}
+
+		if reqResp, ok := uriCfgMap[httpMethod]; ok {
+			endpointProxyCfg.RequestResponse = mergeRequestResponse(s.Overrides.Global, reqResp)
+		}
+
+		endpointProxyConfigMap[httpMethod] = endpointProxyCfg
 	}
 
-	uriCfg, ok := s.Overrides.Uris[uriMap.In]
-	if !ok {
-		return endpointProxyCfg, nil
-	}
-
-	endpointProxyCfg.RequestResponse = mergeRequestResponse(s.Overrides.Global, uriCfg)
-	return endpointProxyCfg, nil
+	return endpointProxyConfigMap, nil
 }
 
 // Merge two config.RequestResponse structs, extending header lists and merging bodies.
@@ -104,8 +145,9 @@ func mergeRequestResponse(a, b config.RequestResponse) config.RequestResponse {
 
 func mergeOverrideConfig(a, b config.OverrideConfig) config.OverrideConfig {
 	return config.OverrideConfig{
-		Headers: append(copyHeadersSlice(a.Headers), copyHeadersSlice(b.Headers)...),
-		Body:    mergeBody(a.Body, b.Body),
+		StatusCode: b.StatusCode,
+		Headers:    append(copyHeadersSlice(a.Headers), copyHeadersSlice(b.Headers)...),
+		Body:       mergeBody(a.Body, b.Body),
 	}
 }
 

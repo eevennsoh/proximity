@@ -33,49 +33,66 @@ func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 
 		// If we're not getting a stream back then just log out the response
 		// and stop there.
-		if !strings.HasPrefix(contentType, "text/event-stream") {
-			return nil
+		if !strings.Contains(contentType, "text/event-stream") {
+			templateInput, err := s.buildTemplateInputFromResponse(res, true)
+			if err != nil {
+				return err
+			}
+
+			return s.renderResponse(res, cfg, templateInput)
 		}
 
-		pr, pw := io.Pipe()
-		orig := res.Body
+		templateInput, err := s.buildTemplateInputFromResponse(res, false)
+		if err != nil {
+			return err
+		}
 
-		go func() {
-			defer orig.Close()
-			defer pw.Close()
+		if err := s.overrideHeaders(cfg.Response.Headers, &res.Header, templateInput); err != nil {
+			return err
+		}
 
-			reader := bufio.NewReader(orig)
-
-			renderStorage := make(map[string]string)
-
-			for {
-				line, err := reader.ReadString('\n')
-				if err != nil {
-					s.Logger.Println(err)
-					break
-				}
-
-				if len(line) == 0 {
-					continue
-				}
-
-				// Modify the line as needed here
-				modifiedLine, err := s.processSseLine(line, cfg.Response.Body, renderStorage)
-				if err != nil {
-					s.Logger.Println(err)
-					break
-				}
-
-				if _, err := pw.Write([]byte(modifiedLine)); err != nil {
-					s.Logger.Println(err)
-					break
-				}
-			}
-		}()
-
-		res.Body = pr
-		return nil
+		return s.processSseLines(res, cfg)
 	}
+}
+
+func (s *server) processSseLines(res *http.Response, cfg *endpointProxyConfig) error {
+	pr, pw := io.Pipe()
+	orig := res.Body
+
+	go func() {
+		defer orig.Close()
+		defer pw.Close()
+
+		reader := bufio.NewReader(orig)
+		renderStorage := make(map[string]string)
+
+		for {
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				s.Logger.Println(err)
+				break
+			}
+
+			if len(line) == 0 {
+				continue
+			}
+
+			// Modify the line as needed here
+			modifiedLine, err := s.processSseLine(line, cfg.Response.Body, renderStorage)
+			if err != nil {
+				s.Logger.Println(err)
+				break
+			}
+
+			if _, err := pw.Write([]byte(modifiedLine)); err != nil {
+				s.Logger.Println(err)
+				break
+			}
+		}
+	}()
+
+	res.Body = pr
+	return nil
 }
 
 // processSseLine allows you to modify each SSE line as it comes through.
@@ -115,7 +132,7 @@ func (s *server) processSseLine(line string, bodyOverride config.Body, renderSto
 	}
 
 	// Rebuild the line and make sure to keep the formatting the same
-	return fmt.Sprintf("data: %s\n", buf.String()), nil
+	return fmt.Sprintf("event: %s\ndata: %s\n", event["type"], buf.String()), nil
 }
 
 // An endpoint proxy handles proxying a single URI
@@ -189,8 +206,8 @@ func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
 func (s *server) serveHeadlessResponse(w http.ResponseWriter, r *http.Request, cfg *endpointProxyConfig, templateInput map[string]any) {
 	// Create a base http.Response which can be rendered and then used to respond to the request
 	res := &http.Response{
-		StatusCode: http.StatusOK,
-		Status:     http.StatusText(http.StatusOK),
+		StatusCode: cfg.Response.StatusCode,
+		Status:     http.StatusText(cfg.Response.StatusCode),
 		Proto:      r.Proto,
 		ProtoMajor: r.ProtoMajor,
 		ProtoMinor: r.ProtoMinor,
@@ -370,6 +387,26 @@ func (s *server) buildTemplateInputFromRequest(req *http.Request) (map[string]an
 	}
 
 	body, err := extractBody(&req.Header, &req.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	templateInput["body"] = body
+	return templateInput, nil
+}
+
+func (s *server) buildTemplateInputFromResponse(res *http.Response, includeBody bool) (map[string]any, error) {
+	templateInput := map[string]any{
+		"headers":  copyHeaders(res.Header),
+		"external": s.TemplateVariables,
+		"settings": s.Settings.Vars,
+	}
+
+	if !includeBody {
+		return templateInput, nil
+	}
+
+	body, err := extractBody(&res.Header, &res.Body)
 	if err != nil {
 		return nil, err
 	}
