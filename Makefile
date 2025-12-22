@@ -8,8 +8,9 @@ ARCH=arm64
 CONFIG = $(shell cat config.yaml | base64 | tr -d "\n")
 CONFIG_DEV = $(shell cat config-dev.yaml | base64 | tr -d "\n")
 
-SETTINGS_PATH = /.config/proximity/settings.json
-SETTINGS_PATH_DEV = /.config/proximity/settings-dev.json
+# Multiple extensions tried by Proximity
+SETTINGS_PATH = /.config/proximity/settings
+SETTINGS_PATH_DEV = /.config/proximity/settings-dev
 
 MODELS = $(shell cat models.json | base64 | tr -d "\n")
 

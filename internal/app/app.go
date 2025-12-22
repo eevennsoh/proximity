@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"strings"
@@ -105,6 +106,8 @@ func (a *App) StartProxy() error {
 
 	go a.proxy.RunServer(a.ctx)
 
+	a.logSettings(logger)
+
 	wruntime.EventsEmit(a.ctx, "proxy:status", "running")
 	return nil
 }
@@ -195,4 +198,14 @@ func readTemplateVariables(templateVariableData string) (map[string]any, error) 
 	}
 
 	return templateVariables, nil
+}
+
+func (a *App) logSettings(logger *log.Logger) {
+	logLineParts := []string{}
+
+	for key, value := range a.settings.Vars {
+		logLineParts = append(logLineParts, fmt.Sprintf("%s=%s", key, value))
+	}
+
+	logger.Printf("loading variables %v", strings.Join(logLineParts, " "))
 }

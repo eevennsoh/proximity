@@ -3,6 +3,7 @@ module bitbucket.org/atlassian-developers/mini-proxy
 go 1.24.2
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/evanphx/json-patch/v5 v5.9.11
 	github.com/expr-lang/expr v1.17.6
 	github.com/go-chi/chi v4.1.2+incompatible
