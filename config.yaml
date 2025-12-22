@@ -97,10 +97,11 @@ overrides:
           text: a436116f-02ce-4520-8fbb-7301462a1674
         - op: add
           name: X-Atlassian-UseCaseId
-          text: "{{ .settings.useCaseId }}"
+          expr: settings.useCaseId
         - op: add
           name: Authorization
-          text: 'slauth {{ slauthtoken (.settings.adGroup) "ai-gateway" "staging" }}'
+          expr: |
+            "slauth " + slauthtoken(settings.adGroup, "ai-gateway", "staging")
 
     response:
       headers:
@@ -116,41 +117,39 @@ overrides:
       POST:
         request:
           body:
-            template: |
-              {
-                {{- $first := true }}
-                {{- range $k, $v := .body }}
-                  {{- if not $first }},{{ end }}
-                  {{- $first = false }}
-                  {{- if eq $k "max_tokens" }}
-                    "max_completion_tokens": {{ toJson $v }}
-                  {{- else }}
-                    "{{ $k }}": {{ toJson $v }}
-                  {{- end }}
-                {{- end }}
-              }
+            expr: |
+              toCompactJson(merge(filterOutKeys(body, ["max_tokens"]),
+                get(body, "max_tokens") != nil ? { "max_completion_tokens": get(body, "max_tokens") } : {}
+              ))
+
+        response:
+          body:
+            expr: |
+              event != nil ? (
+                let eventJson = trimPrefix(event ?? "", "data:") | trim();
+
+                len(eventJson) > 0 ? ("data: " + eventJson + "\n") : "\n"
+              ) : (
+                toCompactJson(body)
+              )
+
 
     /openai/v1/models:
       GET:
         response:
+          statusCode: 200
+
           body:
-            template: |
-              {
+            expr: |
+              toCompactJson({
                 "object": "list",
-                "data": [
-                  {{- $first := true }}
-                  {{- range $model := .external.openai }}
-                  {{- if not $first }},{{ end }}
-                  {{- $first = false }}
-                  {
-                    "id": "{{ $model }}",
-                    "object": "model",
-                    "created": {{ timestamp }},
-                    "owned_by": "atlassian"
-                  }
-                  {{- end }}
-                ]
-              }
+                "data": map(external.openai, true ? {
+                  "id": #,
+                  "object": "model",
+                  "created": timestamp(),
+                  "owned_by": "atlassian"
+                } : {})
+              })
 
 
     # Use the Bedrock provider. All models can be accessed through the proxy
@@ -158,7 +157,7 @@ overrides:
     /bedrock/claude/v1/messages:
       OPTIONS:
         response:
-          statusCode: 204
+          statusCode: 200
 
           headers:
             - op: add
@@ -175,11 +174,11 @@ overrides:
               text: "86400"
 
           body:
-            template: |
-              {
-                "methods": ["POST", "OPTIONS"],
-                "description": "Supported methods for this endpoint"
-              }
+            expr: |
+              toCompactJson({
+                methods: ["POST", "OPTIONS"],
+                description: "Supported methods for this endpoint"
+              })
 
       POST:
         request:
@@ -195,61 +194,45 @@ overrides:
               name: x-api-key
 
           body:
-            template: |
-              {
-                {{- $first := true }}
-                {{- range $k, $v := .body }}
-                {{- if and (ne $k "model") (ne $k "stream") (ne $k "messages") }}
-                  {{- if not $first }},{{ end }}
-                  "{{ $k }}": {{ toJson $v }}
-                  {{- $first = false }}
-                {{- end }}
-                {{- end }},
-                {{/* The bedrock api requires the anthropic version in the json body */}}
-                "anthropic_version": "bedrock-2023-05-31",
-                "messages": [
-                  {{- $firstMsg := true }}
-                  {{- range $msg := .body.messages }}
-                    {{- if not $firstMsg }},{{ end }}
-                    {{- $firstMsg = false }}
-                    {{- if eq (getType $msg.content) "string" }}
-                      {
-                        "role": "{{ $msg.role }}",
-                        "content": [
-                          {
-                            "type": "text",
-                            "text": "{{ safeEncode $msg.content }}"
-                          }
-                        ]
+            expr: |
+              toCompactJson(merge(filterOutKeys(body, ["model", "stream", "messages"]), {
+                anthropic_version: "bedrock-2023-05-31",
+                messages: map(body.messages, 
+                  type(#.content) == "string" 
+                    ? {
+                        role: #.role,
+                        content: [{
+                          type: "text",
+                          text: safeEncode(#.content)
+                        }]
                       }
-                    {{- else }}
-                      {{ toJson $msg }}
-                    {{- end }}
-                  {{- end }}
-                ]
-              }
+                    : #
+                )
+              }))
 
         response:
           headers:
             - op: add
               name: Content-Type
-              text: "{{ index (index .headers \"Content-Type\") 0 }}"
+              expr: headers["Content-Type"][0]
             - op: add
               name: Access-Control-Allow-Origin
               text: "*"
 
           body:
-            template: |
-              {{- /* differentiate between whether the response is returned as an event stream or a full response */}}
-              {{- if .event }}
-                {{- if eq .event.type "message_stop" }}
-                  { "type": "message_stop" }
-                {{- else }}
-                  {{ toJson .event }}
-                {{- end }}
-              {{- else }}
-                {{ toJson .body }}
-              {{- end }}
+            expr: |
+              event != nil ? (
+                let eventJson = trimPrefix(event ?? "", "data:") | trim();
+
+                len(eventJson) > 0 ? (
+                  let eventObj = fromJSON(eventJson);
+                  let eventLine = get(eventObj, "type") == "message_stop" ? toCompactJson({type: "message_stop"}) : eventJson;
+
+                  "event: " + get(eventObj, "type") + "\n" + "data: " + eventLine + "\n"
+                ) : "\n"
+              ) : (
+                toCompactJson(body)
+              )
 
 
     /bedrock/claude/models:
@@ -258,25 +241,18 @@ overrides:
           statusCode: 200
 
           body:
-            template: |
-              {
-                "data": [
-                  {{- $first := true }}
-                  {{- range $model := .external.anthropic }}
-                  {{- if not $first }},{{ end }}
-                  {{- $first = false }}
-                  {
-                    "created_at": "{{ formattedTimestamp "2006-01-02T15:04:05Z" }}",
-                    "display_name": "{{ $model }}",
-                    "id": "{{ $model }}",
-                    "type": "model"
-                  }
-                  {{- end }}
-                ],
-                "first_id": "{{ index .external.anthropic 0 }}",
-                "has_more": false,
-                "last_id": "{{ index .external.anthropic (subtract (len .external.anthropic) 1) }}"
-              }
+            expr: |
+              toCompactJson({
+                data: map(external.anthropic, true ? {
+                  created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
+                  display_name: #,
+                  id: #,
+                  type: "model"
+                } : {}),
+                first_id: external.anthropic[0],
+                has_more: false,
+                last_id: external.anthropic[len(external.anthropic) - 1]
+              })
 
 
     /bedrock/claude/v1/models:
@@ -285,25 +261,18 @@ overrides:
           statusCode: 200
 
           body:
-            template: |
-              {
-                "data": [
-                  {{- $first := true }}
-                  {{- range $model := .external.anthropic }}
-                  {{- if not $first }},{{ end }}
-                  {{- $first = false }}
-                  {
-                    "created_at": "{{ formattedTimestamp "2006-01-02T15:04:05Z" }}",
-                    "display_name": "{{ $model }}",
-                    "id": "{{ $model }}",
-                    "type": "model"
-                  }
-                  {{- end }}
-                ],
-                "first_id": "{{ index .external.anthropic 0 }}",
-                "has_more": false,
-                "last_id": "{{ index .external.anthropic (subtract (len .external.anthropic) 1) }}"
-              }
+            expr: |
+              toCompactJson({
+                data: map(external.anthropic, true ? {
+                  created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
+                  display_name: #,
+                  id: #,
+                  type: "model"
+                } : {}),
+                first_id: external.anthropic[0],
+                has_more: false,
+                last_id: external.anthropic[len(external.anthropic) - 1]
+              })
 
 
     /provider/bedrock/format/openai/v1/chat/completions:
@@ -596,20 +565,13 @@ overrides:
       GET:
         request:
           body:
-            template: |
-              {
+            expr: |
+              toCompactJson({
                 "object": "list",
-                "data": [
-                  {{- $first := true }}
-                  {{- range $model := .external.anthropic }}
-                  {{- if not $first }},{{ end }}
-                  {{- $first = false }}
-                  {
-                    "id": "{{ $model }}",
-                    "object": "model",
-                    "created": {{ timestamp }},
-                    "owned_by": "atlassian"
-                  }
-                  {{- end }}
-                ]
-              }
+                "data": map(external.anthropic, true ? {
+                  "id": #,
+                  "object": "model",
+                  "created": timestamp(),
+                  "owned_by": "atlassian"
+                } : {})
+              })

@@ -18,7 +18,7 @@ type server struct {
 	router     *chi.Mux
 	httpServer *http.Server
 
-	template *template.Template
+	renderer *template.Renderer
 }
 
 func New(options Options) Interface {
@@ -33,7 +33,7 @@ func New(options Options) Interface {
 		Options:    options,
 		router:     router,
 		httpServer: httpServer,
-		template:   template.NewTemplate(options.Logger),
+		renderer:   template.NewRenderer(options.Logger),
 	}
 }
 
@@ -165,15 +165,19 @@ func copyHeader(h config.Header) config.Header {
 	return config.Header{
 		Operation: h.Operation,
 		Name:      h.Name,
-		Text:      h.Text,
-		File:      h.File,
-		Request: config.Request{
-			Method: h.Request.Method,
-			Url:    h.Request.Url,
-			Response: config.ReqResponse{
-				ResultPath: h.Request.Response.ResultPath,
+		Input: config.Input{
+			Text:     h.Text,
+			File:     h.File,
+			Template: h.Template,
+			Expr:     h.Expr,
+			Request: config.Request{
+				Method: h.Request.Method,
+				Url:    h.Request.Url,
+				Response: config.ReqResponse{
+					ResultPath: h.Request.Response.ResultPath,
+				},
+				JsonBody: h.Request.JsonBody,
 			},
-			JsonBody: h.Request.JsonBody,
 		},
 	}
 }
@@ -186,10 +190,26 @@ func mergeBody(a, b config.Body) config.Body {
 		template = b.Template
 	}
 
+	// Same for text
+	text := a.Text
+
+	if b.Text != "" {
+		text = b.Text
+	}
+
+	// Same for expr
+	expr := a.Expr
+
+	if b.Expr != "" {
+		expr = b.Expr
+	}
+
 	// Extend patches
 	return config.Body{
 		Patches:  append(copyPatchesSlice(a.Patches), copyPatchesSlice(b.Patches)...),
+		Text:     text,
 		Template: template,
+		Expr:     expr,
 	}
 }
 

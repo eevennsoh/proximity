@@ -10,7 +10,6 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
-	"text/template"
 
 	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
 
@@ -98,41 +97,27 @@ func (s *server) processSseLines(res *http.Response, cfg *endpointProxyConfig) e
 // processSseLine allows you to modify each SSE line as it comes through.
 // For now, it just logs and returns the line unmodified.
 func (s *server) processSseLine(line string, bodyOverride config.Body, renderStorage map[string]string) (string, error) {
-	newLine := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
-
-	if newLine == "" {
-		return line, nil
-	}
-
 	// No overrides defined, return as is
-	if bodyOverride.Template == "" {
-		return line, nil
-	}
-
-	var event map[string]any
-
-	if err := json.Unmarshal([]byte(newLine), &event); err != nil {
-		s.Logger.Println("warning: could not unmarshal SSE event:", err)
+	if bodyOverride.Template == "" && bodyOverride.Expr == "" {
 		return line, nil
 	}
 
 	templateInput := map[string]any{
-		"event": event,
+		"body":  nil,
+		"event": line,
 	}
 
-	renderedEventBytes, err := s.renderTemplateString(strings.TrimSpace(bodyOverride.Template), templateInput, renderStorage)
+	// Use unified render to support both Template and Expr
+	renderedEventBytes, err := s.renderer.Render(bodyOverride.Template, bodyOverride.Expr, templateInput, renderStorage)
 	if err != nil {
 		return "", err
 	}
 
-	var buf bytes.Buffer
-
-	if err := json.Compact(&buf, renderedEventBytes); err != nil {
-		return "", err
+	if renderedEventBytes == nil {
+		return line, nil
 	}
 
-	// Rebuild the line and make sure to keep the formatting the same
-	return fmt.Sprintf("event: %s\ndata: %s\n", event["type"], buf.String()), nil
+	return string(renderedEventBytes), nil
 }
 
 // An endpoint proxy handles proxying a single URI
@@ -285,19 +270,14 @@ func (s *server) getValueAtPath(data any, path string) (string, error) {
 }
 
 func (s *server) overrideRequestBody(req *http.Request, templateInput map[string]any, bodyOverride config.Body) error {
-	if bodyOverride.Template != "" {
-		renderedBodyBytes, err := s.renderTemplateString(strings.TrimSpace(bodyOverride.Template), templateInput, nil)
-		if err != nil {
-			return err
-		}
+	// Use unified render to support both Template and Expr
+	renderedBodyBytes, err := s.renderer.Render(bodyOverride.Template, bodyOverride.Expr, templateInput, nil)
+	if err != nil {
+		return err
+	}
 
-		var buf bytes.Buffer
-
-		if err := json.Compact(&buf, renderedBodyBytes); err != nil {
-			return err
-		}
-
-		s.applyNewBodyToRequest(req, buf.Bytes())
+	if renderedBodyBytes != nil {
+		s.applyNewBodyToRequest(req, renderedBodyBytes)
 		return nil
 	}
 
@@ -320,19 +300,14 @@ func (s *server) overrideRequestBody(req *http.Request, templateInput map[string
 }
 
 func (s *server) overrideResponseBody(res *http.Response, templateInput map[string]any, bodyOverride config.Body) error {
-	if bodyOverride.Template != "" {
-		renderedBodyBytes, err := s.renderTemplateString(strings.TrimSpace(bodyOverride.Template), templateInput, nil)
-		if err != nil {
-			return err
-		}
+	// Use unified render to support both Template and Expr
+	renderedBodyBytes, err := s.renderer.Render(bodyOverride.Template, bodyOverride.Expr, templateInput, nil)
+	if err != nil {
+		return err
+	}
 
-		var buf bytes.Buffer
-
-		if err := json.Compact(&buf, renderedBodyBytes); err != nil {
-			return err
-		}
-
-		s.applyNewBodyToResponse(res, buf.Bytes())
+	if renderedBodyBytes != nil {
+		s.applyNewBodyToResponse(res, renderedBodyBytes)
 		return nil
 	}
 
@@ -352,21 +327,6 @@ func (s *server) overrideResponseBody(res *http.Response, templateInput map[stri
 
 	s.applyNewBodyToResponse(res, newBody)
 	return nil
-}
-
-func (s *server) renderTemplateString(templateStr string, templateInput map[string]any, storage map[string]string) ([]byte, error) {
-	tmpl, err := template.New("body").Funcs(s.template.FunctionsWithStorage(storage)).Parse(templateStr)
-	if err != nil {
-		return nil, err
-	}
-
-	var buf bytes.Buffer
-
-	if err := tmpl.Execute(&buf, templateInput); err != nil {
-		return nil, err
-	}
-
-	return buf.Bytes(), nil
 }
 
 func (s *server) buildTemplateInputFromRequest(req *http.Request) (map[string]any, error) {
@@ -412,6 +372,8 @@ func (s *server) buildTemplateInputFromResponse(res *http.Response, includeBody 
 	}
 
 	templateInput["body"] = body
+	templateInput["event"] = nil
+
 	return templateInput, nil
 }
 

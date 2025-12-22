@@ -4,6 +4,7 @@ go 1.24.2
 
 require (
 	github.com/evanphx/json-patch/v5 v5.9.11
+	github.com/expr-lang/expr v1.17.6
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/wailsapp/wails/v2 v2.10.2

@@ -66,8 +66,6 @@ func (a *App) Startup(ctx context.Context) {
 	}
 
 	if a.settings.AutoStartProxy {
-		log.Println("Auto-starting proxy")
-
 		if err := a.StartProxy(); err != nil {
 			log.Printf("Failed to auto-start proxy: %v", err)
 		}

@@ -47,12 +47,18 @@ type OverrideConfig struct {
 	Body       Body     `yaml:"body"`
 }
 
+type Input struct {
+	Text     string  `yaml:"text"`
+	Template string  `yaml:"template"`
+	Expr     string  `yaml:"expr"`
+	File     string  `yaml:"file"`
+	Request  Request `yaml:"request"`
+}
+
 type Header struct {
 	Operation Operation `yaml:"op"`
 	Name      string    `yaml:"name"`
-	Text      string    `yaml:"text"`
-	File      string    `yaml:"file"`
-	Request   Request   `yaml:"request"`
+	Input     `yaml:",inline"`
 }
 
 type Request struct {
@@ -68,7 +74,9 @@ type ReqResponse struct {
 
 type Body struct {
 	Patches  []Patch `yaml:"patches"`
+	Text     string  `yaml:"text"`
 	Template string  `yaml:"template"`
+	Expr     string  `yaml:"expr"`
 }
 
 type Patch struct {

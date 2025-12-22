@@ -27,7 +27,7 @@ type HttpResponse struct {
 // renderRequest applies all config-driven transformations to the request and returns a new http.Request.
 func (s *server) renderRequest(req *http.Request, cfg *endpointProxyConfig, templateInput map[string]any) error {
 	if cfg.Out != "" {
-		renderedPath, err := s.renderTemplateString(strings.TrimSpace(cfg.Out), templateInput, nil)
+		renderedPath, err := s.renderer.RenderTemplate(strings.TrimSpace(cfg.Out), templateInput, nil)
 		if err != nil {
 			return err
 		}
@@ -128,16 +128,26 @@ func copyBody(body *io.ReadCloser) ([]byte, error) {
 }
 
 // overrides all the headers and renders the header values at the end to make sure than render functions aren't called
-// for routes than they aren't included in.
-func (s *server) overrideHeaders(headers []config.Header, originalHeaders *http.Header, templateInput map[string]any) error {
-	for _, headerOperation := range headers {
-		if err := s.overrideHeader(headerOperation, originalHeaders); err != nil {
+// for routes than they aren't included in. E.g. for headless requests if not done in two steps, the slauth token would
+// be requested even though the header gets removed after.
+func (s *server) overrideHeaders(headerOperations []config.Header, originalHeaders *http.Header, templateInput map[string]any) error {
+	// Track render info for headers that need it
+	headerRenderInfo := make(map[string]config.Input)
+
+	for _, headerOperation := range headerOperations {
+		if err := s.overrideHeader(headerOperation, originalHeaders, headerRenderInfo); err != nil {
 			return err
 		}
 	}
 
-	for headerKey, headerValue := range *originalHeaders {
-		renderedHeaderValueBytes, err := s.renderTemplateString(headerValue[0], templateInput, nil)
+	for headerKey := range *originalHeaders {
+		input, needsRender := headerRenderInfo[strings.ToLower(headerKey)]
+		if !needsRender {
+			continue
+		}
+
+		// Use unified render to support both Template and Expr in header values
+		renderedHeaderValueBytes, err := s.renderer.Render(input.Template, input.Expr, templateInput, nil)
 		if err != nil {
 			return err
 		}
@@ -151,7 +161,7 @@ func (s *server) overrideHeaders(headers []config.Header, originalHeaders *http.
 
 // overrideHeader modifies the HTTP request headers based on the provided configuration.
 // It can remove headers, set header values from text or file, or clear all headers except "Content-Length".
-func (s *server) overrideHeader(header config.Header, originalHeaders *http.Header) error {
+func (s *server) overrideHeader(header config.Header, originalHeaders *http.Header, headerRenderInfo map[string]config.Input) error {
 	if header.Operation == config.RemoveOperation {
 		if header.Name != "" {
 			originalHeaders.Del(header.Name)
@@ -164,6 +174,19 @@ func (s *server) overrideHeader(header config.Header, originalHeaders *http.Head
 			if header != "Content-Length" {
 				originalHeaders.Del(header)
 			}
+		}
+
+		return nil
+	}
+
+	if header.Expr != "" || header.Template != "" {
+		// Store the expr/template string as a placeholder (or empty)
+		originalHeaders.Set(header.Name, "")
+
+		// Track render info
+		headerRenderInfo[strings.ToLower(header.Name)] = config.Input{
+			Template: header.Template,
+			Expr:     header.Expr,
 		}
 
 		return nil

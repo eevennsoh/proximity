@@ -7,7 +7,6 @@ import (
 	"os/exec"
 	"reflect"
 	"regexp"
-	"strconv"
 	"strings"
 	"sync"
 	"text/template"
@@ -16,7 +15,7 @@ import (
 	jwt "github.com/golang-jwt/jwt/v5"
 )
 
-type Template struct {
+type Renderer struct {
 	logger *log.Logger
 	mu     sync.RWMutex
 
@@ -24,126 +23,66 @@ type Template struct {
 	permanentStorage map[string]string
 }
 
-func NewTemplate(logger *log.Logger) *Template {
-	t := &Template{
+func NewRenderer(logger *log.Logger) *Renderer {
+	return &Renderer{
 		logger:           logger,
 		permanentStorage: make(map[string]string),
 	}
-
-	return t
 }
 
-func (t *Template) FunctionsWithStorage(temporaryStorage map[string]string) template.FuncMap {
+// Render renders content using either Expr or Go template, based on which is provided.
+// If both are provided, Expr takes priority.
+// Returns nil if neither is provided.
+func (r *Renderer) Render(templateStr, exprStr string, input map[string]any, storage map[string]string) ([]byte, error) {
+	// Expr takes priority if both are provided
+	if strings.TrimSpace(exprStr) != "" {
+		return r.RenderExpr(exprStr, input, storage)
+	}
+
+	// Fall back to Go template
+	if strings.TrimSpace(templateStr) != "" {
+		return r.RenderTemplate(templateStr, input, storage)
+	}
+
+	// Neither provided - return nil (no rendering needed)
+	return nil, nil
+}
+
+// RenderTemplate renders using Go text/template
+func (r *Renderer) RenderTemplate(templateStr string, input map[string]any, storage map[string]string) ([]byte, error) {
+	tmpl, err := template.New("body").Funcs(r.FunctionsWithStorage(storage)).Parse(templateStr)
+	if err != nil {
+		return nil, err
+	}
+
+	var buf strings.Builder
+
+	if err := tmpl.Execute(&buf, input); err != nil {
+		return nil, err
+	}
+
+	return []byte(buf.String()), nil
+}
+
+func (r *Renderer) FunctionsWithStorage(temporaryStorage map[string]string) template.FuncMap {
 	return template.FuncMap{
-		"toJson": func(v any) string {
-			b, err := json.Marshal(v)
-			if err != nil {
-				t.logger.Println(err)
-				return ""
-			}
-
-			return string(b)
-		},
-		"getType": func(v any) string {
-			return reflect.TypeOf(v).Kind().String()
-		},
-		"safeEncode": func(v any) string {
-			jsonBytes, err := json.Marshal(v)
-			if err != nil {
-				t.logger.Println(err)
-				return ""
-			}
-
-			safeString := string(jsonBytes)
-			safeString, _ = strings.CutPrefix(safeString, "\"")
-			safeString, _ = strings.CutSuffix(safeString, "\"")
-			return safeString
-		},
-		"normalize": func(str, prefix, suffix string) string {
-			str = strings.TrimPrefix(str, prefix)
-			str = strings.TrimSuffix(str, suffix)
-			return prefix + str + suffix
-		},
-		"trim": func(str, prefix, suffix string) string {
-			str = strings.TrimPrefix(str, prefix)
-			str = strings.TrimSuffix(str, suffix)
-			return str
-		},
-		"timestamp": func() string {
-			return fmt.Sprintf("%d", time.Now().Unix())
-		},
-		"formattedTimestamp": func(layout string) string {
-			return fmt.Sprint(time.Now().Format(layout))
-		},
-		"set": func(key string, val any) string {
-			temporaryStorage[key] = fmt.Sprintf("%v", val)
-			return ""
-		},
-		"get": func(key string) string {
-			return temporaryStorage[key]
-		},
-		"sum": func(nums ...string) string {
-			total := 0
-
-			for _, numStr := range nums {
-				num, err := strconv.Atoi(numStr)
-				if err != nil {
-					t.logger.Println(err)
-					return ""
-				}
-
-				total += num
-			}
-
-			return fmt.Sprintf("%d", total)
-		},
-		"str": func(val any) string {
-			return fmt.Sprint(val)
-		},
-		"subtract": func(a, b int) int {
-			return a - b
-		},
-		"regexFind": func(pattern, s string) (string, error) {
-			re, err := regexp.Compile(pattern)
-			if err != nil {
-				return "", err
-			}
-
-			matches := re.FindStringSubmatch(s)
-
-			// Only expects a single capture group
-			if len(matches) > 1 {
-				return matches[1], nil
-			}
-
-			return "", nil
-		},
-		"slauthtoken": func(groups string, audience string, environment string) string {
-			t.mu.RLock()
-			token, exists := t.permanentStorage["token"]
-
-			// If there is an existing token and it is still valid then use it.
-			if exists && !t.tokenHasExpired(token) {
-				t.logger.Println("use existing token")
-				return token
-			}
-
-			t.logger.Println("requesting slauth token")
-
-			token, err := t.requestSlauthToken(strings.Split(groups, ","), audience, environment)
-			if err != nil {
-				t.logger.Println(err)
-				return ""
-			}
-
-			t.permanentStorage["token"] = token
-			t.mu.RUnlock()
-			return token
-		},
+		"toJson":             r.toJsonFn,
+		"getType":            r.getTypeFn,
+		"safeEncode":         r.safeEncodeFn,
+		"normalize":          r.normalizeFn,
+		"trim":               r.trimFn,
+		"timestamp":          r.timestampFn,
+		"formattedTimestamp": r.formattedTimestampFn,
+		"set":                r.setFn(temporaryStorage),
+		"get":                r.getFn(temporaryStorage),
+		"sum":                r.sumFn,
+		"subtract":           r.subtractFn,
+		"regexFind":          r.regexFindFn,
+		"slauthtoken":        r.slauthtokenFn,
 	}
 }
 
-func (t *Template) requestSlauthToken(groups []string, audience string, environment string) (string, error) {
+func (r *Renderer) requestSlauthToken(groups []string, audience string, environment string) (string, error) {
 	// Build arguments for: atlas slauth token -g <groups> --aud <audience> -e <environment>
 	args := []string{"slauth", "token"}
 
@@ -176,13 +115,13 @@ func (t *Template) requestSlauthToken(groups []string, audience string, environm
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (t *Template) tokenHasExpired(token string) bool {
+func (r *Renderer) tokenHasExpired(token string) bool {
 	// Parse without verifying signature to read claims only
 	parser := jwt.NewParser()
 
 	parsed, _, err := parser.ParseUnverified(token, jwt.MapClaims{})
 	if err != nil {
-		t.logger.Println("tokenHasExpired: jwt parse error:", err)
+		r.logger.Println("tokenHasExpired: jwt parse error:", err)
 		return true
 	}
 
@@ -198,4 +137,116 @@ func (t *Template) tokenHasExpired(token string) bool {
 
 	// Consider tokens expiring within the next 30 seconds as expired
 	return time.Until(exp.Time) <= 30*time.Second
+}
+
+func (r *Renderer) toJsonFn(v string) (string, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+
+	return string(b), nil
+}
+
+func (r *Renderer) getTypeFn(v any) string {
+	return reflect.TypeOf(v).Kind().String()
+}
+
+func (r *Renderer) safeEncodeFn(v any) (string, error) {
+	jsonBytes, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+
+	safeString := string(jsonBytes)
+
+	safeString, _ = strings.CutPrefix(safeString, "\"")
+	safeString, _ = strings.CutSuffix(safeString, "\"")
+	return safeString, nil
+}
+
+func (r *Renderer) normalizeFn(str, prefix, suffix string) string {
+	str = strings.TrimPrefix(str, prefix)
+	str = strings.TrimSuffix(str, suffix)
+	return prefix + str + suffix
+}
+
+func (r *Renderer) trimFn(str, prefix, suffix string) string {
+	str = strings.TrimPrefix(str, prefix)
+	str = strings.TrimSuffix(str, suffix)
+	return str
+}
+
+func (r *Renderer) timestampFn() string {
+	return fmt.Sprintf("%d", time.Now().Unix())
+}
+
+func (r *Renderer) formattedTimestampFn(layout string) string {
+	return fmt.Sprint(time.Now().Format(layout))
+}
+
+func (r *Renderer) setFn(temporaryStorage map[string]string) func(key string, val any) string {
+	return func(key string, val any) string {
+		temporaryStorage[key] = fmt.Sprintf("%v", val)
+		return ""
+	}
+}
+
+func (r *Renderer) getFn(temporaryStorage map[string]string) func(key string) string {
+	return func(key string) string {
+		return temporaryStorage[key]
+	}
+}
+
+func (r *Renderer) sumFn(nums ...int) string {
+	total := 0
+
+	for _, num := range nums {
+		total += num
+	}
+
+	return fmt.Sprintf("%d", total)
+}
+
+func (r *Renderer) subtractFn(a, b int) int {
+	return a - b
+}
+
+func (r *Renderer) regexFindFn(pattern, s string) (string, error) {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", err
+	}
+
+	matches := re.FindStringSubmatch(s)
+
+	// Only expects a single capture group
+	if len(matches) > 1 {
+		return matches[1], nil
+	}
+
+	return "", nil
+}
+
+func (r *Renderer) slauthtokenFn(groups string, audience string, environment string) (string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	token, exists := r.permanentStorage["token"]
+
+	// If there is an existing token and it is still valid then use it.
+	if exists && !r.tokenHasExpired(token) {
+		r.logger.Println("use existing token")
+		return token, nil
+	}
+
+	r.logger.Println("requesting slauth token")
+
+	token, err := r.requestSlauthToken(strings.Split(groups, ","), audience, environment)
+	if err != nil {
+		return "", err
+	}
+
+	r.permanentStorage["token"] = token
+	return token, nil
 }
