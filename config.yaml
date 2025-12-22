@@ -175,7 +175,7 @@ overrides:
     # Use the Bedrock provider. All models can be accessed through the proxy
     # using the anthropic claude format.
     /bedrock/claude/v1/messages:
-      OPTIONS:
+      OPTIONS: &claude_options_response
         response:
           statusCode: 200
 
@@ -255,7 +255,7 @@ overrides:
               )
 
 
-    /bedrock/claude/models:
+    /bedrock/claude/models: &bedrock_models_route
       GET:
         response:
           statusCode: 200
@@ -275,53 +275,13 @@ overrides:
               })
 
 
-    /bedrock/claude/v1/models:
-      GET:
-        response:
-          statusCode: 200
-
-          body:
-            expr: |
-              toCompactJson({
-                data: map(external.bedrock, true ? {
-                  created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
-                  display_name: #,
-                  id: #,
-                  type: "model"
-                } : {}),
-                first_id: external.bedrock[0],
-                has_more: false,
-                last_id: external.bedrock[len(external.bedrock) - 1]
-              })
+    /bedrock/claude/v1/models: *bedrock_models_route
 
 
     # Use the Bedrock provider. All models can be accessed through the proxy
     # using the anthropic claude format.
     /vertex/claude/v1/messages:
-      OPTIONS:
-        response:
-          statusCode: 200
-
-          headers:
-            - op: add
-              name: Access-Control-Allow-Origin
-              text: "*"
-            - op: add
-              name: Access-Control-Allow-Methods
-              text: POST, OPTIONS
-            - op: add
-              name: Access-Control-Allow-Headers
-              text: "*"
-            - op: add
-              name: Access-Control-Max-Age
-              text: "86400"
-
-          body:
-            expr: |
-              toCompactJson({
-                methods: ["POST", "OPTIONS"],
-                description: "Supported methods for this endpoint"
-              })
+      OPTIONS: *claude_options_response
 
       POST:
         request:
@@ -378,7 +338,7 @@ overrides:
               )
 
 
-    /vertex/claude/models:
+    /vertex/claude/models: &vertex_models_route
       GET:
         response:
           statusCode: 200
@@ -398,24 +358,7 @@ overrides:
               })
 
 
-    /vertex/claude/v1/models:
-      GET:
-        response:
-          statusCode: 200
-
-          body:
-            expr: |
-              toCompactJson({
-                data: map(external.vertex, true ? {
-                  created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
-                  display_name: #,
-                  id: #,
-                  type: "model"
-                } : {}),
-                first_id: external.vertex[0],
-                has_more: false,
-                last_id: external.vertex[len(external.bedrock) - 1]
-              })
+    /vertex/claude/v1/models: *vertex_models_route
 
 
     /provider/bedrock/format/openai/v1/chat/completions:
