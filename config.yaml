@@ -26,7 +26,7 @@ supportedUris:
     methods:
       - GET
 
-  # ******* CLAUDE ******* #
+  # ******* AWS BEDROCK CLAUDE ******* #
 
   - in: /bedrock/claude/v1/messages
     out: |
@@ -64,6 +64,26 @@ supportedUris:
       - POST
 
   - in: /provider/bedrock/format/openai/v1/models
+    methods:
+      - GET
+
+  # ******* GOOGLE VERTEX CLAUDE ******* #
+
+  - in: /vertex/claude/v1/messages
+    out: |
+      /v1/google/v1/publishers/anthropic/models/{{ .body.model }}:{{- if .body.stream -}}streamRawPredict{{- else -}}rawPredict{{- end -}}
+    methods:
+      - POST
+
+  - in: /vertex/claude/v1/messages
+    methods:
+      - OPTIONS
+
+  - in: /vertex/claude/models
+    methods:
+      - GET
+
+  - in: /vertex/claude/v1/models
     methods:
       - GET
 
@@ -256,6 +276,129 @@ overrides:
 
 
     /bedrock/claude/v1/models:
+      GET:
+        response:
+          statusCode: 200
+
+          body:
+            expr: |
+              toCompactJson({
+                data: map(external.anthropic, true ? {
+                  created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
+                  display_name: #,
+                  id: #,
+                  type: "model"
+                } : {}),
+                first_id: external.anthropic[0],
+                has_more: false,
+                last_id: external.anthropic[len(external.anthropic) - 1]
+              })
+
+
+    # Use the Bedrock provider. All models can be accessed through the proxy
+    # using the anthropic claude format.
+    /vertex/claude/v1/messages:
+      OPTIONS:
+        response:
+          statusCode: 200
+
+          headers:
+            - op: add
+              name: Access-Control-Allow-Origin
+              text: "*"
+            - op: add
+              name: Access-Control-Allow-Methods
+              text: POST, OPTIONS
+            - op: add
+              name: Access-Control-Allow-Headers
+              text: "*"
+            - op: add
+              name: Access-Control-Max-Age
+              text: "86400"
+
+          body:
+            expr: |
+              toCompactJson({
+                methods: ["POST", "OPTIONS"],
+                description: "Supported methods for this endpoint"
+              })
+
+      POST:
+        request:
+          headers:
+            # The bedrock api requires the anthropic version in the body rather
+            # than as a header like the anthropic api so the header needs to be
+            # removed.
+            - op: remove
+              name: anthropic-version
+
+            # No need for this when using AI-Gateway
+            - op: remove
+              name: x-api-key
+
+          body:
+            expr: |
+              toCompactJson(merge(filterOutKeys(body, ["model", "stream", "messages"]), {
+                anthropic_version: "vertex-2023-10-16",
+                messages: map(body.messages, 
+                  type(#.content) == "string" 
+                    ? {
+                        role: #.role,
+                        content: [{
+                          type: "text",
+                          text: safeEncode(#.content)
+                        }]
+                      }
+                    : #
+                )
+              }))
+
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: headers["Content-Type"][0]
+            - op: add
+              name: Access-Control-Allow-Origin
+              text: "*"
+
+          body:
+            expr: |
+              event != nil ? (
+                let eventJson = trimPrefix(event ?? "", "data:") | trim();
+
+                len(eventJson) > 0 ? (
+                  let eventObj = fromJSON(eventJson);
+                  let eventLine = get(eventObj, "type") == "message_stop" ? toCompactJson({type: "message_stop"}) : eventJson;
+
+                  "event: " + get(eventObj, "type") + "\n" + "data: " + eventLine + "\n"
+                ) : "\n"
+              ) : (
+                toCompactJson(body)
+              )
+
+
+    /vertex/claude/models:
+      GET:
+        response:
+          statusCode: 200
+
+          body:
+            expr: |
+              toCompactJson({
+                data: map(external.anthropic, true ? {
+                  created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
+                  display_name: #,
+                  id: #,
+                  type: "model"
+                } : {}),
+                first_id: external.anthropic[0],
+                has_more: false,
+                last_id: external.anthropic[len(external.anthropic) - 1]
+              })
+
+
+    /vertex/claude/v1/models:
       GET:
         response:
           statusCode: 200
