@@ -263,15 +263,15 @@ overrides:
           body:
             expr: |
               toCompactJson({
-                data: map(external.anthropic, true ? {
+                data: map(external.bedrock, true ? {
                   created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
                   display_name: #,
                   id: #,
                   type: "model"
                 } : {}),
-                first_id: external.anthropic[0],
+                first_id: external.bedrock[0],
                 has_more: false,
-                last_id: external.anthropic[len(external.anthropic) - 1]
+                last_id: external.bedrock[len(external.bedrock) - 1]
               })
 
 
@@ -283,15 +283,15 @@ overrides:
           body:
             expr: |
               toCompactJson({
-                data: map(external.anthropic, true ? {
+                data: map(external.bedrock, true ? {
                   created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
                   display_name: #,
                   id: #,
                   type: "model"
                 } : {}),
-                first_id: external.anthropic[0],
+                first_id: external.bedrock[0],
                 has_more: false,
-                last_id: external.anthropic[len(external.anthropic) - 1]
+                last_id: external.bedrock[len(external.bedrock) - 1]
               })
 
 
@@ -386,15 +386,15 @@ overrides:
           body:
             expr: |
               toCompactJson({
-                data: map(external.anthropic, true ? {
+                data: map(external.vertex, true ? {
                   created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
                   display_name: #,
                   id: #,
                   type: "model"
                 } : {}),
-                first_id: external.anthropic[0],
+                first_id: external.vertex[0],
                 has_more: false,
-                last_id: external.anthropic[len(external.anthropic) - 1]
+                last_id: external.vertex[len(external.vertex) - 1]
               })
 
 
@@ -406,15 +406,15 @@ overrides:
           body:
             expr: |
               toCompactJson({
-                data: map(external.anthropic, true ? {
+                data: map(external.vertex, true ? {
                   created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
                   display_name: #,
                   id: #,
                   type: "model"
                 } : {}),
-                first_id: external.anthropic[0],
+                first_id: external.vertex[0],
                 has_more: false,
-                last_id: external.anthropic[len(external.anthropic) - 1]
+                last_id: external.vertex[len(external.bedrock) - 1]
               })
 
 
@@ -711,7 +711,7 @@ overrides:
             expr: |
               toCompactJson({
                 "object": "list",
-                "data": map(external.anthropic, true ? {
+                "data": map(external.bedrock, true ? {
                   "id": #,
                   "object": "model",
                   "created": timestamp(),
