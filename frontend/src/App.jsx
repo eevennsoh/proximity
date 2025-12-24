@@ -44,12 +44,8 @@ const describeEndpoint = (p) => {
     return "Model list endpoint";
   }
 
-  if (p == "/bedrock/claude/v1/model/{model}/invoke") {
-    return "Claude Bedrock invocation endpoint";
-  }
-
-  if (p == "/bedrock/claude/v1/model/{model}/invoke-with-response-stream") {
-    return "Claude Bedrock invocation endpoint (streaming)";
+  if (p == "/bedrock/claude/models") {
+    return "Model list endpoint";
   }
 
   if (p == "/provider/bedrock/format/openai/v1/chat/completions") {
@@ -68,6 +64,18 @@ const describeEndpoint = (p) => {
     return "Streamed chat endpoint";
   }
 
+  if (p == "/vertex/claude/v1/messages") {
+    return "Chat endpoint";
+  }
+
+  if (p == "/vertex/claude/v1/models") {
+    return "Model list endpoint";
+  }
+
+  if (p == "/vertex/claude/models") {
+    return "Model list endpoint";
+  }
+
   return "Proxied endpoint.";
 };
 
@@ -75,6 +83,7 @@ const describeEndpoint = (p) => {
 const getEndpointProvider = (path) => {
   if (path.startsWith("/openai")) return "OpenAI";
   if (path.startsWith("/bedrock")) return "Claude";
+  if (path.startsWith("/vertex")) return "Claude";
   if (path.startsWith("/provider/bedrock")) return "Claude";
   if (path.startsWith("/google")) return "Gemini";
   return "Other";
@@ -82,7 +91,29 @@ const getEndpointProvider = (path) => {
 
 const groupEndpoints = (endpoints) => {
   if (!endpoints) return {};
-  return endpoints.reduce((acc, endpoint) => {
+  
+  // First, deduplicate by path and collect all methods
+  const deduped = endpoints.reduce((acc, endpoint) => {
+    const path = endpoint.in;
+    if (!acc[path]) {
+      acc[path] = {
+        in: path,
+        methods: []
+      };
+    }
+    // Add methods if they exist
+    if (endpoint.methods && Array.isArray(endpoint.methods)) {
+      endpoint.methods.forEach(method => {
+        if (!acc[path].methods.includes(method)) {
+          acc[path].methods.push(method);
+        }
+      });
+    }
+    return acc;
+  }, {});
+  
+  // Then group by provider
+  return Object.values(deduped).reduce((acc, endpoint) => {
     const provider = getEndpointProvider(endpoint.in);
     if (!acc[provider]) {
       acc[provider] = [];
@@ -355,20 +386,41 @@ export default function App() {
                               {providerEndpoints.map((e, i) => (
                                 <div
                                   key={i}
-                                  className="p-3"
+                                  className="p-3 flex items-center justify-between"
                                 >
-                                  <div className="text-[15px] font-medium text-slate-700 dark:text-slate-200">
-                                    {describeEndpoint(e.in)}
+                                  <div>
+                                    <div className="text-[15px] font-medium text-slate-700 dark:text-slate-200">
+                                      {describeEndpoint(e.in)}
+                                    </div>
+                                    <div className="mt-1.5">
+                                      <code
+                                        onClick={() => copyToClipboard(e.in)}
+                                        className="inline-block font-mono text-sm text-slate-800 dark:text-slate-100 bg-black/5 dark:bg-black/20 ring-1 ring-black/10 dark:ring-white/10 rounded px-3 py-1.5 hover:bg-black/10 dark:hover:bg-black/30 transition-colors select-none"
+                                        style={{ cursor: 'pointer' }}
+                                      >
+                                        {e.in}
+                                      </code>
+                                    </div>
                                   </div>
-                                  <div className="mt-1.5">
-                                    <code 
-                                      onClick={() => copyToClipboard(e.in)}
-                                      className="inline-block font-mono text-sm text-slate-800 dark:text-slate-100 bg-black/5 dark:bg-black/20 ring-1 ring-black/10 dark:ring-white/10 rounded px-3 py-1.5 hover:bg-black/10 dark:hover:bg-black/30 transition-colors select-none"
-                                      style={{ cursor: 'pointer' }}
-                                    >
-                                      {e.in}
-                                    </code>
-                                  </div>
+                                  {e.methods && e.methods.length > 0 && (
+                                    <div className="flex gap-1.5 ml-4">
+                                      {e.methods.map((method, mi) => (
+                                        <span
+                                          key={mi}
+                                          className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
+                                            method === 'GET' ? 'bg-emerald-500/20 text-emerald-400' :
+                                            method === 'POST' ? 'bg-blue-500/20 text-blue-400' :
+                                            method === 'OPTIONS' ? 'bg-purple-500/20 text-purple-400' :
+                                            method === 'PUT' ? 'bg-amber-500/20 text-amber-400' :
+                                            method === 'DELETE' ? 'bg-red-500/20 text-red-400' :
+                                            'bg-slate-500/20 text-slate-400'
+                                          }`}
+                                        >
+                                          {method}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </div>
