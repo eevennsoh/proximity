@@ -197,6 +197,7 @@ func (s *server) serveHeadlessResponse(w http.ResponseWriter, r *http.Request, c
 		ProtoMajor: r.ProtoMajor,
 		ProtoMinor: r.ProtoMinor,
 		Header:     make(http.Header),
+		Body:       io.NopCloser(bytes.NewReader([]byte{})),
 	}
 
 	if err := s.renderResponse(res, cfg, templateInput); err != nil {
@@ -205,11 +206,16 @@ func (s *server) serveHeadlessResponse(w http.ResponseWriter, r *http.Request, c
 		return
 	}
 
-	body, err := copyBody(&res.Body)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		fmt.Fprintln(w, err.Error())
-		return
+	var body []byte
+	var err error
+
+	if res.Body != nil {
+		body, err = copyBody(&res.Body)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			fmt.Fprintln(w, err.Error())
+			return
+		}
 	}
 
 	// Copy headers from the rendered response to the ResponseWriter

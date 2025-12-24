@@ -670,7 +670,9 @@ overrides:
 
     /provider/bedrock/format/openai/v1/models:
       GET:
-        request:
+        response:
+          statusCode: 200
+
           body:
             expr: |
               toCompactJson({
