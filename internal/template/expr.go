@@ -33,6 +33,7 @@ func (r *Renderer) RenderExpr(exprStr string, env map[string]any, temporaryStora
 		expr.Function("filterOutKeys", r.exprFilterOutKeys),
 		expr.Function("merge", r.exprMerge),
 		expr.Function("toCompactJson", r.exprToCompactJson),
+		expr.Function("getIndex", r.exprGetIndex),
 		// expr.Function("string", r.exprString),
 		// expr.Function("req", r.exprReq) <- Make a request and return the result. This will be useful for forwarding requests for models to the ML endpoints
 		// expr.Function("log", r.exprLog) <- Log something out using the Logger
@@ -271,3 +272,33 @@ func (r *Renderer) exprToCompactJson(params ...any) (any, error) {
 // 	}
 // 	return string(jsonBytes), nil
 // }
+
+// exprGetIndex safely gets an element from an array by index
+// Usage: getIndex(array, index) - returns nil if index is out of bounds
+func (r *Renderer) exprGetIndex(params ...any) (any, error) {
+	if len(params) != 2 {
+		return nil, fmt.Errorf("getIndex expects 2 arguments (array, index)")
+	}
+
+	arr := params[0]
+	if arr == nil {
+		return nil, nil
+	}
+
+	index, ok := params[1].(int)
+	if !ok {
+		return nil, fmt.Errorf("getIndex: index must be an integer")
+	}
+
+	v := reflect.ValueOf(arr)
+
+	if v.Kind() != reflect.Slice && v.Kind() != reflect.Array {
+		return nil, fmt.Errorf("getIndex: first argument must be an array or slice")
+	}
+
+	if index < 0 || index >= v.Len() {
+		return nil, nil
+	}
+
+	return v.Index(index).Interface(), nil
+}

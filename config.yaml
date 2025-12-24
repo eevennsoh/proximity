@@ -365,287 +365,308 @@ overrides:
       POST:
         request:
           body:
-            template: |
-              {
-                "anthropic_version": "bedrock-2023-05-31",
+            expr: |
+              let base = filterOutKeys(body, ["model", "stream", "messages", "tools", "tool_choice", "max_tokens", "max_completion_tokens", "stop", "parallel_tool_calls", "reasoning_effort", "stream_options"]);
+              let maxTokens = get(body, "max_tokens") ?? get(body, "max_completion_tokens") ?? 8192;
+              let hasSystem = len(body.messages) > 0 && body.messages[0].role == "system";
+              let systemObj = hasSystem ? { system: safeEncode(body.messages[0].content) } : {};
 
-                {{- /* set max tokens if max_tokens or max_completion_tokens are defined */}}
-                {{- if .body.max_tokens }}
-                "max_tokens": {{ .body.max_tokens }},
-                {{- else if .body.max_completion_tokens }}
-                "max_tokens": {{ .body.max_completion_tokens }},
-                {{- else}}
-                "max_tokens": 8192,
-                {{- end }}
+              let stopObj = get(body, "stop") != nil
+                ? { stop_sequences: type(body.stop) == "string" ? [body.stop] : body.stop }
+                : {};
 
-                {{- /* system prompt: first message with role == "system" */}}
-                {{- range $i, $msg := .body.messages }}
-                  {{- if and (eq $msg.role "system") (eq $i 0) }}
-                    "system": "{{ safeEncode $msg.content }}",
-                  {{- end }}
-                {{- end }}
+              let toolsObj = get(body, "tools") != nil
+                ? {
+                    tools: map(filter(body.tools, true ? #.type == "function" : false), true ? {
+                      name: #.function.name,
+                      description: safeEncode(#.function.description ?? ""),
+                      input_schema: #.function.parameters
+                    } : {})
+                  }
+                : {};
 
-                {{- if .body.tools }}
-                "tools": [
-                  {{- $firstTool := true }}
-                  {{- range $tool := .body.tools }}
-                    {{- if eq $tool.type "function" }}
-                      {{- if not $firstTool }},{{ end }}
-                      {
-                        "name": "{{ $tool.function.name }}",
-                        "description": "{{ safeEncode $tool.function.description }}",
-                        "input_schema": {{ toJson $tool.function.parameters }}
-                      }
-                      {{- $firstTool = false }}
-                    {{- end }}
-                  {{- end }}
-                ],
-                {{- end }}
+              let toolChoiceObj = get(body, "tool_choice") != nil
+                ? {
+                    tool_choice: type(body.tool_choice) == "string"
+                      ? (body.tool_choice == "auto" ? { type: "auto" } : { type: "any" })
+                      : { type: "tool", name: body.tool_choice.function.name }
+                  }
+                : {};
 
-                {{- if .body.tool_choice }}
-                "tool_choice": {
-                {{- if eq (getType .body.tool_choice) "string" -}}
-                  {{- if eq .body.tool_choice "auto" }}
-                    "type": "auto"
-                  {{- else }}
-                    "type": "any"
-                  {{- end }}
-                {{- else }}
-                  "type": "tool",
-                  "name": "{{ .body.tool_choice.function.name }}"
-                {{- end }}
-                },
-                {{- end }}
+              let nonSystemMsgs = filter(body.messages, true ? #.role != "system" : false);
 
-                {{- if .body.temperature }}
-                "temperature": {{ .body.temperature }},
-                {{- end }}
-                {{- if .body.top_p }}
-                "top_p": {{ .body.top_p }},
-                {{- end }}
-
-                {{- if .body.stop }}
-                  {{- if eq (getType .body.stop) "string" }}
-                    "stop_sequences": [ "{{ .body.stop }}" ],
-                  {{- else if eq (getType .body.stop) "slice" }}
-                    "stop_sequences": {{ toJson .body.stop }},
-                  {{- end }}
-                {{- end }}
-
-                "messages": [
-                  {{- $firstMsg := true }}
-                  {{- range $msg := .body.messages }}
-                    {{- if ne $msg.role "system" }}
-                      {{- if not $firstMsg }},{{ end }}
-                      {{- $firstMsg = false }}
-                      {
-                        {{- if eq $msg.role "tool" }}
-                          "role": "user",
-                          "content": [
-                            {
-                              "type": "tool_result",
-                              "tool_use_id": "{{ $msg.tool_call_id }}",
-                              "content": "{{ safeEncode $msg.content }}"
-                            }
-                          ]
-                        {{- else if $msg.tool_calls }}
-                          "role": "assistant",
-                          "content": [
-                            {
-                              "type": "tool_use",
-                              "id": "{{( index $msg.tool_calls 0).id }}",
-                              "name": "{{ (index $msg.tool_calls 0).function.name }}",
-                              "input": {{ (index $msg.tool_calls 0).function.arguments }}
-                            }
-                          ]
-                        {{- else if eq (getType $msg.content) "string" }}
-                          "role": "{{ $msg.role }}",
-                          "content": [
-                            {
-                              "type": "text",
-                              "text": "{{ safeEncode $msg.content }}"
-                            }
-                          ]
-                        {{- else }}
-                          "role": "{{ $msg.role }}",
-                          "content": [
-                            {{- $firstContentMsg := true }}
-                            {{- range $contentMsg := $msg.content }}
-                              {{- if not $firstContentMsg }},{{ end }}
-                              {{- $firstContentMsg = false }}
-
-                              {{- if eq $contentMsg.type "text" }}
-                              {
-                                "type": "text",
-                                "text": "{{ safeEncode (index $contentMsg $contentMsg.type) }}"
-                              }
-                              {{- else if or (eq $contentMsg.type "image_url") (eq $contentMsg.type "input_image") }}
-                              {
-                                "type": "image",
-                                "source": {
-                                  "type": "base64",
-                                  "media_type": "{{ regexFind "^.+:(image/.+?);.+$" $contentMsg.image_url.url }}",
-                                  "data": "{{ regexFind "^.+?,(.+)$" $contentMsg.image_url.url }}"
+              let convertedMsgs = map(nonSystemMsgs, true ? (
+                #.role == "tool" ? {
+                  role: "user",
+                  content: [{
+                    type: "tool_result",
+                    tool_use_id: get(#, "tool_call_id"),
+                    content: get(#, "content") ?? ""
+                  }]
+                } : #.role == "assistant" && get(#, "tool_calls") != nil ? {
+                  role: "assistant",
+                  content: map(get(#, "tool_calls") ?? [], true ? (
+                    let args = get(get(#, "function") ?? {}, "arguments") ?? "";
+                    {
+                      type: "tool_use",
+                      id: get(#, "id"),
+                      name: get(get(#, "function") ?? {}, "name"),
+                      input: len(args) > 0 ? fromJSON(args) : {}
+                    }
+                  ) : {})
+                } : {
+                  role: #.role,
+                  content: type(#.content) == "string"
+                    ? [{ type: "text", text: safeEncode(#.content) }]
+                    : map(#.content, true ? (
+                        #.type == "text"
+                          ? { type: "text", text: safeEncode(#.text) }
+                          : (#.type == "image_url" || #.type == "input_image")
+                            ? {
+                                type: "image",
+                                source: {
+                                  type: "base64",
+                                  media_type: regexFind("^data:(image/[^;]+);", #.image_url.url),
+                                  data: regexFind(",(.+)$", #.image_url.url)
                                 }
                               }
-                              {{- end }}
-                            {{- end }}
-                          ]
-                        {{- end }}
-                      }
-                    {{- end }}
-                  {{- end }}
-                ]
-              }
+                            : #
+                      ) : {})
+                }
+              ) : {});
+
+              toCompactJson(merge(
+                base,
+                {
+                  anthropic_version: "bedrock-2023-05-31",
+                  max_tokens: maxTokens,
+                  messages: convertedMsgs
+                },
+                systemObj,
+                stopObj,
+                toolsObj,
+                toolChoiceObj
+              ))
 
         response:
           body:
-            template: |
-              {{- if .event }}
-                {
-                  "object": "chat.completion.chunk",
-                  "created": {{ timestamp }},
-                  "service_tier": "scale",
-                  "system_fingerprint": null,
+            expr: |
+              event != nil ? (
+                let eventJson = trimPrefix(event ?? "", "data:") | trim();
 
-                {{- if eq .event.type "message_start" }}
+                len(eventJson) > 0 ? (
+                  let e = fromJSON(eventJson);
+                  let eventType = get(e, "type") ?? "";
+                  let msg = get(e, "message") ?? {};
+                  let msgId = get(msg, "id") ?? "";
+                  let msgModel = get(msg, "model") ?? "";
+                  let msgUsage = get(msg, "usage") ?? {};
+                  let delta = get(e, "delta") ?? {};
+                  let deltaText = get(delta, "text") ?? "";
+                  let eUsage = get(e, "usage") ?? {};
 
-                  {{ set "requestId" .event.message.id }}
-                  {{ set "model" .event.message.model }}
-                  {{ set "role" .event.message.role }}
-                  {{ set "input_tokens" .event.message.usage.input_tokens }}
-                  {{ set "output_tokens" .event.message.usage.output_tokens }}
+                  eventType == "message_start" ? (
+                    setToStorage("requestId", msgId);
+                    setToStorage("model", msgModel);
+                    setToStorage("input_tokens", string(get(msgUsage, "input_tokens") ?? 0));
+                    setToStorage("output_tokens", string(get(msgUsage, "output_tokens") ?? 0));
+                    setToStorage("tool_count", "0");
+                    "data: " + toCompactJson({
+                      id: msgId,
+                      object: "chat.completion.chunk",
+                      created: timestamp(),
+                      model: msgModel,
+                      service_tier: "scale",
+                      system_fingerprint: nil,
+                      choices: [{
+                        index: 0,
+                        delta: { role: "assistant" },
+                        logprobs: nil,
+                        finish_reason: nil
+                      }],
+                      usage: nil
+                    }) + "\n\n"
+                  ) : eventType == "content_block_start" ? (
+                    let contentBlock = get(e, "content_block") ?? {};
+                    let blockType = get(contentBlock, "type") ?? "";
+                    let blockIndex = get(e, "index") ?? 0;
 
-                  "id": "{{ .event.message.id }}",
-                  "model": "{{ .event.message.model }}",
+                    blockType == "tool_use" ? (
+                      let currentToolCount = int(getFromStorage("tool_count") ?? "0");
+                      setToStorage("tool_count", string(currentToolCount + 1));
+                      setToStorage("block_to_tool_" + string(blockIndex), string(currentToolCount));
+                      "data: " + toCompactJson({
+                        id: getFromStorage("requestId"),
+                        object: "chat.completion.chunk",
+                        created: timestamp(),
+                        model: getFromStorage("model"),
+                        service_tier: "scale",
+                        system_fingerprint: nil,
+                        choices: [{
+                          index: 0,
+                          delta: {
+                            tool_calls: [{
+                              index: currentToolCount,
+                              id: get(contentBlock, "id"),
+                              type: "function",
+                              function: {
+                                name: get(contentBlock, "name"),
+                                arguments: ""
+                              }
+                            }]
+                          },
+                          logprobs: nil,
+                          finish_reason: nil
+                        }],
+                        usage: nil
+                      }) + "\n\n"
+                    ) : ""
+                  ) : eventType == "content_block_delta" ? (
+                    let deltaType = get(delta, "type") ?? "text_delta";
+                    let blockIndex = get(e, "index") ?? 0;
 
-                  "choices": [
-                    {
-                      "index": 0,
-                      "delta": {
-                        "role": "assistant",
-                        "content": ""
-                      },
-                      "logprobs": null,
-                      "finish_reason": null
-                    }
-                  ],
-                  "usage": null
-
-                {{- else if or (eq .event.type "content_block_start") (eq .event.type "content_block_stop") (eq .event.type "message_delta") }}
-
-                  "id": "{{ get "requestId" }}",
-                  "model": "{{ get "model" }}",
-
-                  "choices": [
-                    {
-                      "index": 0,
-                      "delta": {
-                        "role": "assistant",
-                        "content": ""
-                      },
-                      "logprobs": null,
-                      "finish_reason": null
-                    }
-                  ],
-                  "usage": null
-
-                {{- else if eq .event.type "message_stop" }}
-
-                  "id": "{{ get "requestId" }}",
-                  "model": "{{ get "model" }}",
-
-                  "choices": [],
-                  "usage": {
-                    "prompt_tokens": {{ get "input_tokens" }},
-                    "completion_tokens": {{ get "output_tokens" }},
-                    "total_tokens": {{ sum (get "input_tokens") (get "output_tokens") }},
-                    "prompt_tokens_details": {
-                        "cached_tokens": 0,
-                        "audio_tokens": 0
-                    },
-                    "completion_tokens_details": {
-                        "reasoning_tokens": 0,
-                        "audio_tokens": 0,
-                        "accepted_prediction_tokens": 0,
-                        "rejected_prediction_tokens": 0
-                    }
-                  }
-
-                {{- else }}
-
-                  "id": "{{ get "requestId" }}",
-                  "model": "{{ get "model" }}",
-
-                  "choices": [
-                    {
-                      "index": 0,
-                      "delta": {
-                        "content": "{{ safeEncode .event.delta.text }}"
-                      },
-                      "logprobs": null,
-                      "finish_reason": null
-                    }
-                  ],
-                  "usage": null
-
-                {{- end }}
-                }
-              {{- else }}
-                {
-                  "id": "{{ .body.id }}",
-                  "object": "chat.completion",
-                  "created": {{ timestamp }},
-                  "model": "{{ .body.model }}",
-                  "choices": [
-                  {{- $lastIndex := subtract (len .body.content) 1 }}
-                  {{- $first := true }}
-                  {{- range $index, $message := .body.content }}
-                  {{- if not $first }},{{ end }}
-                  {{- $first = false }}
-                    {
-                      "index": {{ $index }},
-                      {{- if eq $index $lastIndex }}
-                      "finish_reason": "{{ if eq .body.stop_reason "end_turn" }}stop{{- end }}",
-                      {{- end }}
-                      {{- if eq $message.type "text" }}
-                      "message": {
-                        "role": "assistant",
-                        "content": "{{ $message.text }}"
-                      },
-                      {{- else if eq $message.type "tool_use" }}
-                      "message": {
-                        "role": "assistant",
-                        "tool_calls": [
-                          {
-                            "id": "{{ $message.id }}",
-                            "type": "function",
-                            "function": {
-                              "name": "{{ $message.name }}",
-                              "arguments": "{{ safeEncode (toJson $message.input) }}"
-                            }
-                          }
-                        ]
-                      },
-                      {{- end }}
-                      "logprobs": null
-                    }
-                  {{- end }}
-                  ],
-                  "usage": {
-                    "prompt_tokens": {{ .body.usage.input_tokens }},
-                    "completion_tokens": {{ .body.usage.output_tokens }},
-                    "total_tokens": {{ sum (str .body.usage.input_tokens) (str .body.usage.output_tokens) }},
-                    "completion_tokens_details": {
-                      "reasoning_tokens": 0,
-                      "audio_tokens": 0,
-                      "accepted_prediction_tokens": 0,
-                      "rejected_prediction_tokens": 0
+                    deltaType == "input_json_delta" ? (
+                      let toolIndex = int(getFromStorage("block_to_tool_" + string(blockIndex)) ?? "0");
+                      let partialJson = get(delta, "partial_json") ?? "";
+                      "data: " + toCompactJson({
+                        id: getFromStorage("requestId"),
+                        object: "chat.completion.chunk",
+                        created: timestamp(),
+                        model: getFromStorage("model"),
+                        service_tier: "scale",
+                        system_fingerprint: nil,
+                        choices: [{
+                          index: 0,
+                          delta: {
+                            tool_calls: [{
+                              index: toolIndex,
+                              function: {
+                                arguments: partialJson
+                              }
+                            }]
+                          },
+                          logprobs: nil,
+                          finish_reason: nil
+                        }],
+                        usage: nil
+                      }) + "\n\n"
+                    ) : (
+                      "data: " + toCompactJson({
+                        id: getFromStorage("requestId"),
+                        object: "chat.completion.chunk",
+                        created: timestamp(),
+                        model: getFromStorage("model"),
+                        service_tier: "scale",
+                        system_fingerprint: nil,
+                        choices: [{
+                          index: 0,
+                          delta: { content: deltaText },
+                          logprobs: nil,
+                          finish_reason: nil
+                        }],
+                        usage: nil
+                      }) + "\n\n"
+                    )
+                  ) : eventType == "message_delta" ? (
+                    let stopReason = get(delta, "stop_reason") ?? "end_turn";
+                    let finishReason = stopReason == "end_turn" ? "stop"
+                      : stopReason == "tool_use" ? "tool_calls"
+                      : "stop";
+                    setToStorage("output_tokens", string(get(eUsage, "output_tokens") ?? 0));
+                    setToStorage("finish_reason", finishReason);
+                    "data: " + toCompactJson({
+                      id: getFromStorage("requestId"),
+                      object: "chat.completion.chunk",
+                      created: timestamp(),
+                      model: getFromStorage("model"),
+                      service_tier: "scale",
+                      system_fingerprint: nil,
+                      choices: [{
+                        index: 0,
+                        delta: {},
+                        logprobs: nil,
+                        finish_reason: finishReason
+                      }],
+                      usage: nil
+                    }) + "\n\n"
+                  ) : eventType == "message_stop" ? (
+                    let inputTokens = int(getFromStorage("input_tokens") ?? "0");
+                    let outputTokens = int(getFromStorage("output_tokens") ?? "0");
+                    "data: " + toCompactJson({
+                      id: getFromStorage("requestId"),
+                      object: "chat.completion.chunk",
+                      created: timestamp(),
+                      model: getFromStorage("model"),
+                      service_tier: "scale",
+                      system_fingerprint: nil,
+                      choices: [],
+                      usage: {
+                        prompt_tokens: inputTokens,
+                        completion_tokens: outputTokens,
+                        total_tokens: inputTokens + outputTokens,
+                        prompt_tokens_details: { cached_tokens: 0, audio_tokens: 0 },
+                        completion_tokens_details: {
+                          reasoning_tokens: 0,
+                          audio_tokens: 0,
+                          accepted_prediction_tokens: 0,
+                          rejected_prediction_tokens: 0
+                        }
+                      }
+                    }) + "\n\ndata: [DONE]\n\n"
+                  ) : ""
+                ) : "\n"
+              ) : (
+                let b = body ?? {};
+                let content = get(b, "content") ?? [];
+                let stopReason = get(b, "stop_reason") ?? "stop";
+                let finishReason = stopReason == "end_turn" ? "stop"
+                  : stopReason == "tool_use" ? "tool_calls"
+                  : stopReason;
+                let textBlocks = filter(content, true ? get(#, "type") == "text" : false);
+                let toolBlocks = filter(content, true ? get(#, "type") == "tool_use" : false);
+                let hasToolUse = len(toolBlocks) > 0;
+                let firstTextBlock = getIndex(textBlocks, 0);
+                let textContent = firstTextBlock != nil ? (get(firstTextBlock, "text") ?? "") : "";
+                let toolCalls = hasToolUse
+                  ? map(toolBlocks, true ? {
+                      id: get(#, "id"),
+                      type: "function",
+                      function: {
+                        name: get(#, "name"),
+                        arguments: toCompactJson(get(#, "input") ?? {})
+                      }
+                    } : {})
+                  : nil;
+                let usage = get(b, "usage") ?? {};
+                let inputTokens = get(usage, "input_tokens") ?? 0;
+                let outputTokens = get(usage, "output_tokens") ?? 0;
+                toCompactJson({
+                  id: get(b, "id"),
+                  object: "chat.completion",
+                  created: timestamp(),
+                  model: get(b, "model"),
+                  choices: [{
+                    index: 0,
+                    message: hasToolUse
+                      ? { role: "assistant", content: textContent != "" ? textContent : nil, tool_calls: toolCalls }
+                      : { role: "assistant", content: textContent },
+                    logprobs: nil,
+                    finish_reason: finishReason
+                  }],
+                  usage: {
+                    prompt_tokens: inputTokens,
+                    completion_tokens: outputTokens,
+                    total_tokens: inputTokens + outputTokens,
+                    completion_tokens_details: {
+                      reasoning_tokens: 0,
+                      audio_tokens: 0,
+                      accepted_prediction_tokens: 0,
+                      rejected_prediction_tokens: 0
                     }
                   },
-                  "service_tier": "default"
-                }
-              {{- end }}
+                  service_tier: "default"
+                })
+              )
 
     /provider/bedrock/format/openai/v1/models:
       GET:
