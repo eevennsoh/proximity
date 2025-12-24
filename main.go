@@ -6,11 +6,16 @@ import (
 	"strconv"
 
 	"github.com/wailsapp/wails/v2"
+	"github.com/wailsapp/wails/v2/pkg/menu"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 
 	"bitbucket.org/atlassian-developers/mini-proxy/internal/app"
+)
+
+const (
+	name = "Proximity"
 )
 
 var (
@@ -21,6 +26,7 @@ var (
 	Config            string
 	SettingsPath      string
 	TemplateVariables string
+	Version           string
 )
 
 func main() {
@@ -29,20 +35,26 @@ func main() {
 		log.Fatal(err)
 	}
 
-	app := app.NewApp(
+	application := app.NewApp(
 		Config,
 		TemplateVariables,
 		port,
 		SettingsPath,
 	)
 
+	// Create application menu
+	appMenu := menu.NewMenu()
+	appMenu.Append(menu.AppMenu())
+	appMenu.Append(menu.WindowMenu())
+
 	// Create application with options
 	err = wails.Run(&options.App{
-		Title:           "Proximity",
+		Title:           name,
 		Width:           1024,
 		Height:          768,
 		CSSDragProperty: "--wails-draggable",
 		CSSDragValue:    "drag",
+		Menu:            appMenu,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
@@ -54,14 +66,18 @@ func main() {
 				UseToolbar:                 false,
 				HideToolbarSeparator:       true,
 			},
+			About: &mac.AboutInfo{
+				Title:   name,
+				Message: "Version " + Version,
+			},
 			WebviewIsTransparent: true,
 			WindowIsTranslucent:  true,
 			Appearance:           mac.NSAppearanceNameDarkAqua,
 		},
 		BackgroundColour: &options.RGBA{R: 255, G: 255, B: 255, A: 0},
-		OnStartup:        app.Startup,
+		OnStartup:        application.Startup,
 		Bind: []any{
-			app,
+			application,
 		},
 	})
 

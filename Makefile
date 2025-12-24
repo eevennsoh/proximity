@@ -14,8 +14,8 @@ SETTINGS_PATH_DEV = /.config/proximity/settings-dev
 
 MODELS = $(shell cat models.json | base64 | tr -d "\n")
 
-BUILD_LD_FLAGS = -X 'main.Config=$(CONFIG)' -X 'main.TemplateVariables=$(MODELS)' -X 'main.Port=29576' -X 'main.SettingsPath=$(SETTINGS_PATH)'
-BUILD_LD_FLAGS_DEV = -X 'main.Config=$(CONFIG_DEV)' -X 'main.TemplateVariables=$(MODELS)' -X 'main.Port=29575' -X 'main.SettingsPath=$(SETTINGS_PATH_DEV)'
+BUILD_LD_FLAGS = -X 'main.Config=$(CONFIG)' -X 'main.TemplateVariables=$(MODELS)' -X 'main.Port=29576' -X 'main.SettingsPath=$(SETTINGS_PATH)' -X 'main.Version=$(VERSION)'
+BUILD_LD_FLAGS_DEV = -X 'main.Config=$(CONFIG_DEV)' -X 'main.TemplateVariables=$(MODELS)' -X 'main.Port=29575' -X 'main.SettingsPath=$(SETTINGS_PATH_DEV)' -X 'main.Version=$(VERSION)'
 
 .PHONY: run build package
 .DEFAULT_GOAL := run
