@@ -22,7 +22,7 @@ type Config struct {
 
 type UriMap struct {
 	In           string   `yaml:"in" json:"in"`
-	Out          string   `yaml:"out" json:"out"`
+	Out          Input    `yaml:"out" json:"out"`
 	BaseEndpoint string   `yaml:"baseEndpoint" json:"baseEndpoint,omitempty"`
 	Methods      []string `yaml:"methods" json:"methods,omitempty"`
 }
@@ -53,6 +53,11 @@ type Input struct {
 	Expr     string  `yaml:"expr"`
 	File     string  `yaml:"file"`
 	Request  Request `yaml:"request"`
+}
+
+// IsEmpty returns true if the Input has no value set
+func (i Input) IsEmpty() bool {
+	return i.Text == "" && i.Template == "" && i.Expr == "" && i.File == "" && i.Request.Url == ""
 }
 
 type Header struct {

@@ -6,17 +6,20 @@ supportedUris:
   # ******* OPENAI ******* #
 
   - in: /openai/v1/chat/completions
-    out: /v1/openai/v1/chat/completions
+    out:
+      text: /v1/openai/v1/chat/completions
     methods:
       - POST
 
   - in: /openai/v1/responses
-    out: /v1/openai/v1/responses
+    out:
+      text: /v1/openai/v1/responses
     methods:
       - POST
 
   - in: /openai/v1/images/generations
-    out: /v1/openai/v1/images/generations
+    out:
+      text: /v1/openai/v1/images/generations
     methods:
       - POST
 
@@ -29,8 +32,9 @@ supportedUris:
   # ******* AWS BEDROCK CLAUDE ******* #
 
   - in: /bedrock/claude/v1/messages
-    out: |
-      /v1/bedrock/model/{{ regexReplace "^(claude-.*-\\d{8})$" "anthropic.$1-v1:0" .body.model }}/invoke{{- if .body.stream -}}-with-response-stream{{- end -}}
+    out:
+      expr: |
+        "/v1/bedrock/model/" + regexReplace("^(claude-.*-\\d{8})$", "anthropic.$1-v1:0", body.model) + "/invoke" + (body.stream ? "-with-response-stream" : "")
     methods:
       - POST
 
@@ -47,8 +51,9 @@ supportedUris:
       - GET
 
   - in: /provider/bedrock/format/openai/v1/chat/completions
-    out: |
-      /v1/bedrock/model/{{ regexReplace "^(claude-.*-\\d{8})$" "anthropic.$1-v1:0" .body.model }}/invoke{{- if .body.stream -}}-with-response-stream{{- end -}}
+    out:
+      expr: |
+        "/v1/bedrock/model/" + regexReplace("^(claude-.*-\\d{8})$", "anthropic.$1-v1:0", body.model) + "/invoke" + (body.stream ? "-with-response-stream" : "")
     methods:
       - POST
 
@@ -59,8 +64,9 @@ supportedUris:
   # ******* GOOGLE VERTEX CLAUDE ******* #
 
   - in: /vertex/claude/v1/messages
-    out: |
-      /v1/google/v1/publishers/anthropic/models/{{ regexReplace "^(.+)-(\\d{8})$" "$1@$2" .body.model }}:{{- if .body.stream -}}streamRawPredict{{- else -}}rawPredict{{- end -}}
+    out:
+      expr: |
+        "/v1/google/v1/publishers/anthropic/models/" + regexReplace("^(.+)-(\\d{8})$", "$1@$2", body.model) + ":" + (body.stream ? "streamRawPredict" : "rawPredict")
     methods:
       - POST
 
@@ -79,12 +85,14 @@ supportedUris:
   # ******* GEMINI ******* #
 
   - in: /google/gemini/v1beta/models/{model}:generateContent
-    out: /v1/google/v1/publishers/google/models/{{ .pathParams.model }}:generateContent
+    out:
+      expr: '"/v1/google/v1/publishers/google/models/" + pathParams.model + ":generateContent"'
     methods:
       - POST
 
   - in: /google/gemini/v1beta/models/{model}:streamGenerateContent
-    out: /v1/google/v1/publishers/google/models/{{ .pathParams.model }}:streamGenerateContent
+    out:
+      expr: '"/v1/google/v1/publishers/google/models/" + pathParams.model + ":streamGenerateContent"'
     methods:
       - POST
 

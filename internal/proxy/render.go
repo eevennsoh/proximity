@@ -26,14 +26,21 @@ type HttpResponse struct {
 
 // renderRequest applies all config-driven transformations to the request and returns a new http.Request.
 func (s *server) renderRequest(req *http.Request, cfg *endpointProxyConfig, templateInput map[string]any) error {
-	if cfg.Out != "" {
-		renderedPath, err := s.renderer.RenderTemplate(strings.TrimSpace(cfg.Out), templateInput, nil)
-		if err != nil {
-			return err
+	if !cfg.Out.IsEmpty() {
+		renderedPath := cfg.Out.Text
+
+		if cfg.Out.Text == "" {
+			// Use unified render to support both Template and Expr
+			renderedPathBytes, err := s.renderer.Render(cfg.Out.Template, cfg.Out.Expr, templateInput, nil)
+			if err != nil {
+				return err
+			}
+
+			renderedPath = strings.TrimSpace(string(renderedPathBytes))
 		}
 
-		req.URL.Path = string(renderedPath)
-		req.RequestURI = string(renderedPath)
+		req.URL.Path = renderedPath
+		req.RequestURI = renderedPath
 	}
 
 	if err := s.overrideHeaders(cfg.Request.Headers, &req.Header, templateInput); err != nil {

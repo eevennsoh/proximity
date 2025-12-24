@@ -134,7 +134,7 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 			return
 		}
 
-		if cfg.Out == "" {
+		if cfg.Out.IsEmpty() {
 			s.serveHeadlessResponse(w, r, cfg, templateInput)
 			return
 		}
