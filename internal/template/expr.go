@@ -19,7 +19,6 @@ func (r *Renderer) RenderExpr(exprStr string, env map[string]any, temporaryStora
 	options := []expr.Option{
 		expr.Env(env),
 		expr.Function("safeEncode", r.exprSafeEncode),
-		expr.Function("normalize", r.exprNormalize),
 		expr.Function("trimStr", r.exprTrim),
 		expr.Function("timestamp", r.exprTimestamp),
 		expr.Function("formattedTimestamp", r.exprFormattedTimestamp),
@@ -29,12 +28,14 @@ func (r *Renderer) RenderExpr(exprStr string, env map[string]any, temporaryStora
 		expr.Function("type", r.exprType),
 		expr.Function("has", r.exprHas),
 		expr.Function("regexFind", r.exprRegexFind),
+		expr.Function("regexReplace", r.exprRegexReplace),
 		expr.Function("slauthtoken", r.exprSlauthToken),
 		expr.Function("filterOutKeys", r.exprFilterOutKeys),
 		expr.Function("merge", r.exprMerge),
 		expr.Function("toCompactJson", r.exprToCompactJson),
 		// expr.Function("string", r.exprString),
 		// expr.Function("req", r.exprReq) <- Make a request and return the result. This will be useful for forwarding requests for models to the ML endpoints
+		// expr.Function("log", r.exprLog) <- Log something out using the Logger
 	}
 
 	program, err := expr.Compile(exprStr, options...)
@@ -54,22 +55,10 @@ func (r *Renderer) RenderExpr(exprStr string, env map[string]any, temporaryStora
 
 func (r *Renderer) exprSafeEncode(params ...any) (any, error) {
 	if len(params) != 1 {
-		return nil, fmt.Errorf("normalize expects 1 argument (input)")
+		return nil, fmt.Errorf("safeEncode expects 1 argument (input)")
 	}
 
 	return r.safeEncodeFn(params[0])
-}
-
-func (r *Renderer) exprNormalize(params ...any) (any, error) {
-	if len(params) != 3 {
-		return nil, fmt.Errorf("normalize expects 3 arguments (str, prefix, suffix)")
-	}
-
-	str := fmt.Sprint(params[0])
-	prefix := fmt.Sprint(params[1])
-	suffix := fmt.Sprint(params[2])
-
-	return r.normalizeFn(str, prefix, suffix), nil
 }
 
 func (r *Renderer) exprTrim(params ...any) (any, error) {
@@ -166,6 +155,18 @@ func (r *Renderer) exprRegexFind(params ...any) (any, error) {
 	s := fmt.Sprint(params[1])
 
 	return r.regexFindFn(pattern, s)
+}
+
+func (r *Renderer) exprRegexReplace(params ...any) (any, error) {
+	if len(params) != 3 {
+		return nil, fmt.Errorf("regexReplace expects 3 arguments (pattern, replacement, string)")
+	}
+
+	pattern := fmt.Sprint(params[0])
+	replacement := fmt.Sprint(params[1])
+	s := fmt.Sprint(params[2])
+
+	return r.regexReplaceFn(pattern, replacement, s)
 }
 
 func (r *Renderer) exprSlauthToken(params ...any) (any, error) {

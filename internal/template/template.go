@@ -69,7 +69,6 @@ func (r *Renderer) FunctionsWithStorage(temporaryStorage map[string]string) temp
 		"toJson":             r.toJsonFn,
 		"getType":            r.getTypeFn,
 		"safeEncode":         r.safeEncodeFn,
-		"normalize":          r.normalizeFn,
 		"trim":               r.trimFn,
 		"timestamp":          r.timestampFn,
 		"formattedTimestamp": r.formattedTimestampFn,
@@ -78,6 +77,7 @@ func (r *Renderer) FunctionsWithStorage(temporaryStorage map[string]string) temp
 		"sum":                r.sumFn,
 		"subtract":           r.subtractFn,
 		"regexFind":          r.regexFindFn,
+		"regexReplace":       r.regexReplaceFn,
 		"slauthtoken":        r.slauthtokenFn,
 	}
 }
@@ -165,12 +165,6 @@ func (r *Renderer) safeEncodeFn(v any) (string, error) {
 	return safeString, nil
 }
 
-func (r *Renderer) normalizeFn(str, prefix, suffix string) string {
-	str = strings.TrimPrefix(str, prefix)
-	str = strings.TrimSuffix(str, suffix)
-	return prefix + str + suffix
-}
-
 func (r *Renderer) trimFn(str, prefix, suffix string) string {
 	str = strings.TrimPrefix(str, prefix)
 	str = strings.TrimSuffix(str, suffix)
@@ -226,6 +220,16 @@ func (r *Renderer) regexFindFn(pattern, s string) (string, error) {
 	}
 
 	return "", nil
+}
+
+func (r *Renderer) regexReplaceFn(pattern, replacement, s string) (string, error) {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return "", err
+	}
+
+	// ReplaceAllString supports $1, $2, etc. for capture group references
+	return re.ReplaceAllString(s, replacement), nil
 }
 
 func (r *Renderer) slauthtokenFn(groups string, audience string, environment string) (string, error) {
