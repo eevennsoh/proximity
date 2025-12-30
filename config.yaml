@@ -353,6 +353,8 @@ overrides:
 
 
     /provider/bedrock/format/openai/v1/chat/completions:
+      OPTIONS: *claude_options_response
+
       POST:
         request:
           body:
@@ -440,6 +442,14 @@ overrides:
               ))
 
         response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: headers["Content-Type"][0]
+            - op: add
+              name: Access-Control-Allow-Origin
+              text: "*"
+
           body:
             expr: |
               event != nil ? (
