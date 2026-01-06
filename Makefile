@@ -1,5 +1,5 @@
 
-VERSION = 0.0.8
+VERSION = 0.0.9
 ENVVAR ?= CGO_ENABLED=0
 
 # ARCH=$(if $(TARGETPLATFORM),$(lastword $(subst /, ,$(TARGETPLATFORM))),amd64)
