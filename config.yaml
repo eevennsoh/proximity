@@ -117,7 +117,8 @@ overrides:
         - op: add
           name: Authorization
           expr: |
-            "slauth " + slauthtoken(settings.adGroup, "ai-gateway", "staging")
+            let adGroupList = get(settings, "adGroup") != nil ? [get(settings, "adGroup")] : [];
+            "slauth " + slauthtoken(adGroupList, "ai-gateway", "staging")
 
     response:
       headers:

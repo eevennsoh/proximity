@@ -175,7 +175,13 @@ func (r *Renderer) exprSlauthToken(params ...any) (any, error) {
 		return nil, fmt.Errorf("slauthtoken expects 3 arguments (groups, audience, environment)")
 	}
 
-	groups := fmt.Sprint(params[0])
+	groupsAny := params[0].([]any)
+	groups := make([]string, 0, len(groupsAny))
+
+	for _, group := range groupsAny {
+		groups = append(groups, fmt.Sprint(group))
+	}
+
 	audience := fmt.Sprint(params[1])
 	environment := fmt.Sprint(params[2])
 

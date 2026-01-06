@@ -232,7 +232,7 @@ func (r *Renderer) regexReplaceFn(pattern, replacement, s string) (string, error
 	return re.ReplaceAllString(s, replacement), nil
 }
 
-func (r *Renderer) slauthtokenFn(groups string, audience string, environment string) (string, error) {
+func (r *Renderer) slauthtokenFn(groups []string, audience string, environment string) (string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -246,7 +246,7 @@ func (r *Renderer) slauthtokenFn(groups string, audience string, environment str
 
 	r.logger.Println("requesting slauth token")
 
-	token, err := r.requestSlauthToken(strings.Split(groups, ","), audience, environment)
+	token, err := r.requestSlauthToken(groups, audience, environment)
 	if err != nil {
 		return "", err
 	}
