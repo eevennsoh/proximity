@@ -40,6 +40,7 @@ func main() {
 		TemplateVariables,
 		port,
 		SettingsPath,
+		Version,
 	)
 
 	// Create application menu

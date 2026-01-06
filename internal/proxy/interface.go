@@ -11,7 +11,9 @@ import (
 type Options struct {
 	Port     int
 	TestMode bool
-	Logger   *log.Logger
+	Version  string
+
+	Logger *log.Logger
 
 	*config.Config
 	Settings          *settings.Struct

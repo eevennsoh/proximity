@@ -103,11 +103,16 @@ overrides:
         - op: remove
 
         - op: add
+          name: User-Agent
+          expr: '"proximity/" + version'
+
+        - op: add
           name: Content-Type
           text: application/json
         - op: add
           name: Accept
           text: application/json
+
         - op: add
           name: X-Atlassian-CloudId
           text: a436116f-02ce-4520-8fbb-7301462a1674

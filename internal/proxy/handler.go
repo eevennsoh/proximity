@@ -351,6 +351,7 @@ func (s *server) buildTemplateInputFromRequest(req *http.Request) (map[string]an
 		"headers":    copyHeaders(req.Header),
 		"external":   s.TemplateVariables,
 		"settings":   s.Settings.Vars,
+		"version":    s.Version,
 	}
 
 	body, err := extractBody(&req.Header, &req.Body)

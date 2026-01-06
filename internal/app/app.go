@@ -35,15 +35,18 @@ type App struct {
 
 	settingsPath string
 	settings     *settings.Struct
+
+	version string
 }
 
 // NewApp creates a new App application struct
-func NewApp(configPath, templateVariables string, port int, settingsPath string) *App {
+func NewApp(configPath, templateVariables string, port int, settingsPath, version string) *App {
 	return &App{
 		configPath:        configPath,
 		templateVariables: templateVariables,
 		port:              port,
 		settingsPath:      settingsPath,
+		version:           version,
 	}
 }
 
@@ -99,6 +102,7 @@ func (a *App) StartProxy() error {
 		Config:            a.config,
 		Settings:          a.settings,
 		TemplateVariables: templateVariables,
+		Version:           a.version,
 	})
 
 	a.running = true
