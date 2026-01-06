@@ -1,5 +1,6 @@
 
-baseEndpoint: https://ai-gateway.us-east-1.staging.atl-paas.net
+baseEndpoint: |
+  "https://ai-gateway.us-east-1." + get(settings, "aiGatewayEnv") ?? "staging" + ".atl-paas.net"
 
 uriGroups:
 
@@ -115,7 +116,7 @@ overrides:
 
         - op: add
           name: X-Atlassian-CloudId
-          text: a436116f-02ce-4520-8fbb-7301462a1674
+          expr: get(settings, "atlassianCloudId") ?? "a436116f-02ce-4520-8fbb-7301462a1674"
         - op: add
           name: X-Atlassian-UseCaseId
           expr: settings.useCaseId
@@ -145,6 +146,30 @@ overrides:
               ))
 
         response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: headers["Content-Type"][0]
+
+          body:
+            expr: |
+              event != nil ? (
+                let eventJson = trimPrefix(event ?? "", "data:") | trim();
+
+                len(eventJson) > 0 ? ("data: " + eventJson + "\n") : "\n"
+              ) : (
+                toCompactJson(body)
+              )
+
+
+    /openai/v1/responses:
+      POST:
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: headers["Content-Type"][0]
+
           body:
             expr: |
               event != nil ? (

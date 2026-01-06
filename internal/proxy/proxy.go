@@ -103,10 +103,9 @@ func (s *server) combineCommonUriConfigs() (map[string]map[string]*endpointProxy
 func (s *server) buildEndpointProxyConfigs(uriMap config.UriMap) (map[string]*endpointProxyConfig, error) {
 	endpointProxyConfigMap := make(map[string]*endpointProxyConfig)
 
-	baseEndpoint := s.BaseEndpoint
-
-	if uriMap.BaseEndpoint != "" {
-		baseEndpoint = uriMap.BaseEndpoint
+	baseEndpoint, err := s.getBaseEndpoint(uriMap)
+	if err != nil {
+		return nil, err
 	}
 
 	target, err := url.Parse(baseEndpoint)
@@ -138,6 +137,24 @@ func (s *server) buildEndpointProxyConfigs(uriMap config.UriMap) (map[string]*en
 	}
 
 	return endpointProxyConfigMap, nil
+}
+
+func (s *server) getBaseEndpoint(uriMap config.UriMap) (string, error) {
+	if uriMap.BaseEndpoint != "" {
+		return uriMap.BaseEndpoint, nil
+	}
+
+	env := map[string]any{
+		"settings": s.Settings.Vars,
+	}
+
+	baseEndpointBytes, err := s.renderer.RenderExpr(s.BaseEndpoint, env, nil)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to evaluate baseEndpoint expr: %w", err)
+	}
+
+	return string(baseEndpointBytes), nil
 }
 
 // Merge two config.RequestResponse structs, extending header lists and merging bodies.
