@@ -19,108 +19,10 @@ try {
   API = null;
 }
 
-const describeEndpoint = (p) => {
-  if (p == "/openai/v1/chat/completions") {
-    return "Chat endpoint";
-  }
-
-  if (p == "/openai/v1/responses") {
-    return "Response endpoint";
-  }
-
-  if (p == "/openai/v1/images/generations") {
-    return "Image generation endpoint";
-  }
-
-  if (p == "/openai/v1/models") {
-    return "Model list endpoint";
-  }
-
-  if (p == "/bedrock/claude/v1/messages") {
-    return "Chat endpoint";
-  }
-
-  if (p == "/bedrock/claude/v1/models") {
-    return "Model list endpoint";
-  }
-
-  if (p == "/bedrock/claude/models") {
-    return "Model list endpoint";
-  }
-
-  if (p == "/provider/bedrock/format/openai/v1/chat/completions") {
-    return "OpenAI compatible chat endpoint";
-  }
-
-  if (p == "/provider/bedrock/format/openai/v1/models") {
-    return "OpenAI compatible model list endpoint";
-  }
-
-  if (p == "/google/gemini/v1beta/models/{model}:generateContent") {
-    return "Chat endpoint";
-  }
-
-  if (p == "/google/gemini/v1beta/models/{model}:streamGenerateContent") {
-    return "Streamed chat endpoint";
-  }
-
-  if (p == "/vertex/claude/v1/messages") {
-    return "Chat endpoint";
-  }
-
-  if (p == "/vertex/claude/v1/models") {
-    return "Model list endpoint";
-  }
-
-  if (p == "/vertex/claude/models") {
-    return "Model list endpoint";
-  }
-
-  return "Proxied endpoint.";
-};
-
-
-const getEndpointProvider = (path) => {
-  if (path.startsWith("/openai")) return "OpenAI";
-  if (path.startsWith("/bedrock")) return "Claude";
-  if (path.startsWith("/vertex")) return "Claude";
-  if (path.startsWith("/provider/bedrock")) return "Claude";
-  if (path.startsWith("/google")) return "Gemini";
-  return "Other";
-};
-
-const groupEndpoints = (endpoints) => {
-  if (!endpoints) return {};
-  
-  // First, deduplicate by path and collect all methods
-  const deduped = endpoints.reduce((acc, endpoint) => {
-    const path = endpoint.in;
-    if (!acc[path]) {
-      acc[path] = {
-        in: path,
-        methods: []
-      };
-    }
-    // Add methods if they exist
-    if (endpoint.methods && Array.isArray(endpoint.methods)) {
-      endpoint.methods.forEach(method => {
-        if (!acc[path].methods.includes(method)) {
-          acc[path].methods.push(method);
-        }
-      });
-    }
-    return acc;
-  }, {});
-  
-  // Then group by provider
-  return Object.values(deduped).reduce((acc, endpoint) => {
-    const provider = getEndpointProvider(endpoint.in);
-    if (!acc[provider]) {
-      acc[provider] = [];
-    }
-    acc[provider].push(endpoint);
-    return acc;
-  }, {});
+// Extract methods from the out array
+const getMethodsFromEndpoint = (endpoint) => {
+  if (!endpoint.out || !Array.isArray(endpoint.out)) return [];
+  return endpoint.out.map(outMethod => outMethod.method).filter(Boolean);
 };
 
 const getProviderLogo = (provider) => {
@@ -136,7 +38,7 @@ export default function App() {
   const [port, setPort] = useState(null);
   const [running, setRunning] = useState(false);
   const [logs, setLogs] = useState("");
-  const [endpoints, setEndpoints] = useState([]);
+  const [uriGroups, setUriGroups] = useState([]);
   const [activeTab, setActiveTab] = useState("routes");
   const [showCopiedToast, setShowCopiedToast] = useState(false);
 
@@ -171,7 +73,9 @@ export default function App() {
         if (API?.GetEndpoints) {
           const info = await API.GetEndpoints();
           if (mounted && info) {
-            if (info.endpoints) setEndpoints(info.endpoints);
+            if (info.uriGroups) {
+              setUriGroups(info.uriGroups);
+            }
           }
         }
         if (API?.GetPort) {
@@ -358,39 +262,43 @@ export default function App() {
               </div>
             ) : (
               <div className="p-2">
-                {endpoints?.length ? (
+                {uriGroups?.length ? (
                   <div className="space-y-3">
-                    {Object.entries(groupEndpoints(endpoints)).map(
-                      ([provider, providerEndpoints]) => {
-                        return (
+                    {uriGroups.map((group) => {
+                      const groupName = group.name;
+                      const endpoints = group.supportedUris || [];
+                      
+                      return (
+                        <div
+                          key={groupName}
+                          className="rounded-lg bg-[hsl(240,5%,15%)] shadow-lg shadow-black/20 border border-[hsl(240,5%,14%)] overflow-hidden"
+                        >
                           <div
-                            key={provider}
-                            className="rounded-lg bg-[hsl(240,5%,15%)] shadow-lg shadow-black/20 border border-[hsl(240,5%,14%)] overflow-hidden"
+                            className="px-3 py-3.5 border-b border-[hsl(240,5%,11%)] bg-black/20 flex items-center gap-3"
                           >
-                            <div
-                              className="px-3 py-3.5 border-b border-[hsl(240,5%,11%)] bg-black/20 flex items-center gap-3"
-                            >
-                              {getProviderLogo(provider) && (
-                                <img 
-                                  src={getProviderLogo(provider)} 
-                                  alt={`${provider} logo`}
-                                  className="w-6 h-6 object-contain select-none pointer-events-none"
-                                  draggable="false"
-                                />
-                              )}
-                              <h2 className="text-lg font-semibold tracking-wide text-slate-700 dark:text-slate-200">
-                                {provider}
-                              </h2>
-                            </div>
-                            <div className="divide-y divide-[hsl(240,5%,12%)]">
-                              {providerEndpoints.map((e, i) => (
+                            {getProviderLogo(groupName) && (
+                              <img
+                                src={getProviderLogo(groupName)}
+                                alt={`${groupName} logo`}
+                                className="w-6 h-6 object-contain select-none pointer-events-none"
+                                draggable="false"
+                              />
+                            )}
+                            <h2 className="text-lg font-semibold tracking-wide text-slate-700 dark:text-slate-200">
+                              {groupName}
+                            </h2>
+                          </div>
+                          <div className="divide-y divide-[hsl(240,5%,12%)]">
+                            {endpoints.map((e, i) => {
+                              const methods = getMethodsFromEndpoint(e);
+                              return (
                                 <div
                                   key={i}
                                   className="p-3 flex items-center justify-between"
                                 >
                                   <div>
                                     <div className="text-[15px] font-medium text-slate-700 dark:text-slate-200">
-                                      {describeEndpoint(e.in)}
+                                      {e.description || "Proxied endpoint"}
                                     </div>
                                     <div className="mt-1.5">
                                       <code
@@ -402,9 +310,9 @@ export default function App() {
                                       </code>
                                     </div>
                                   </div>
-                                  {e.methods && e.methods.length > 0 && (
+                                  {methods.length > 0 && (
                                     <div className="flex gap-1.5 ml-4">
-                                      {e.methods.map((method, mi) => (
+                                      {methods.map((method, mi) => (
                                         <span
                                           key={mi}
                                           className={`text-xs font-semibold px-2 py-0.5 rounded-md ${
@@ -422,12 +330,12 @@ export default function App() {
                                     </div>
                                   )}
                                 </div>
-                              ))}
-                            </div>
+                              );
+                            })}
                           </div>
-                        );
-                      }
-                    )}
+                        </div>
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-sm text-slate-400 dark:text-slate-500">

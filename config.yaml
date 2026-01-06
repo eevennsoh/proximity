@@ -1,100 +1,99 @@
 
 baseEndpoint: https://ai-gateway.us-east-1.staging.atl-paas.net
 
-supportedUris:
+uriGroups:
 
-  # ******* OPENAI ******* #
+  - name: OpenAI
+    supportedUris:
+      - in: /openai/v1/chat/completions
+        description: Chat endpoint
+        out:
+          - method: POST
+            text: /v1/openai/v1/chat/completions
 
-  - in: /openai/v1/chat/completions
-    out:
-      text: /v1/openai/v1/chat/completions
-    methods:
-      - POST
+      - in: /openai/v1/responses
+        description: Responses endpoint
+        out:
+          - method: POST
+            text: /v1/openai/v1/responses
 
-  - in: /openai/v1/responses
-    out:
-      text: /v1/openai/v1/responses
-    methods:
-      - POST
+      - in: /openai/v1/images/generations
+        description: Image generation endpoint
+        out:
+          - method: POST
+            text: /v1/openai/v1/images/generations
 
-  - in: /openai/v1/images/generations
-    out:
-      text: /v1/openai/v1/images/generations
-    methods:
-      - POST
+      - in: /openai/v1/models
+        description: Model list endpoint
+        out:
+          - method: GET
 
-  # If out is not defined then no request is forwarded, instead a complete response
-  # must be provided in the config for this.
-  - in: /openai/v1/models
-    methods:
-      - GET
+  - name: Claude
+    supportedUris:
+      - in: /bedrock/claude/v1/messages
+        description: Chat endpoint
+        out:
+          - method: OPTIONS
+          - method: POST
+            expr: |
+              "/v1/bedrock/model/" + regexReplace("^(claude-.*-\\d{8})$", "anthropic.$1-v1:0", body.model) + "/invoke" + (body.stream ? "-with-response-stream" : "")
 
-  # ******* AWS BEDROCK CLAUDE ******* #
+      - in: /bedrock/claude/models
+        description: Model list endpoint
+        out:
+          - method: GET
 
-  - in: /bedrock/claude/v1/messages
-    out:
-      expr: |
-        "/v1/bedrock/model/" + regexReplace("^(claude-.*-\\d{8})$", "anthropic.$1-v1:0", body.model) + "/invoke" + (body.stream ? "-with-response-stream" : "")
-    methods:
-      - POST
+      - in: /bedrock/claude/v1/models
+        description: Model list endpoint
+        out:
+          - method: GET
 
-  - in: /bedrock/claude/v1/messages
-    methods:
-      - OPTIONS
+      - in: /provider/bedrock/format/openai/v1/chat/completions
+        description: OpenAI-compatible chat endpoint
+        out:
+          - method: OPTIONS
+          - method: POST
+            expr: |
+              "/v1/bedrock/model/" + regexReplace("^(claude-.*-\\d{8})$", "anthropic.$1-v1:0", body.model) + "/invoke" + (body.stream ? "-with-response-stream" : "")
 
-  - in: /bedrock/claude/models
-    methods:
-      - GET
+      - in: /provider/bedrock/format/openai/v1/models
+        description: OpenAI-compatible model list endpoint
+        out:
+          - method: GET
 
-  - in: /bedrock/claude/v1/models
-    methods:
-      - GET
+      - in: /vertex/claude/v1/messages
+        description: Chat endpoint
+        out:
+          - method: OPTIONS
+          - method: POST
+            expr: |
+              "/v1/google/v1/publishers/anthropic/models/" + regexReplace("^(.+)-(\\d{8})$", "$1@$2", body.model) + ":" + (body.stream ? "streamRawPredict" : "rawPredict")
 
-  - in: /provider/bedrock/format/openai/v1/chat/completions
-    out:
-      expr: |
-        "/v1/bedrock/model/" + regexReplace("^(claude-.*-\\d{8})$", "anthropic.$1-v1:0", body.model) + "/invoke" + (body.stream ? "-with-response-stream" : "")
-    methods:
-      - POST
+      - in: /vertex/claude/models
+        description: Model list endpoint
+        out:
+          - method: GET
 
-  - in: /provider/bedrock/format/openai/v1/models
-    methods:
-      - GET
+      - in: /vertex/claude/v1/models
+        description: Model list endpoint
+        out:
+          - method: GET
 
-  # ******* GOOGLE VERTEX CLAUDE ******* #
+  - name: Gemini
+    supportedUris:
+      - in: /google/gemini/v1beta/models/{model}:generateContent
+        description: Chat endpoint
+        out:
+          - method: POST
+            expr: |
+              "/v1/google/v1/publishers/google/models/" + pathParams.model + ":generateContent"
 
-  - in: /vertex/claude/v1/messages
-    out:
-      expr: |
-        "/v1/google/v1/publishers/anthropic/models/" + regexReplace("^(.+)-(\\d{8})$", "$1@$2", body.model) + ":" + (body.stream ? "streamRawPredict" : "rawPredict")
-    methods:
-      - POST
-
-  - in: /vertex/claude/v1/messages
-    methods:
-      - OPTIONS
-
-  - in: /vertex/claude/models
-    methods:
-      - GET
-
-  - in: /vertex/claude/v1/models
-    methods:
-      - GET
-
-  # ******* GEMINI ******* #
-
-  - in: /google/gemini/v1beta/models/{model}:generateContent
-    out:
-      expr: '"/v1/google/v1/publishers/google/models/" + pathParams.model + ":generateContent"'
-    methods:
-      - POST
-
-  - in: /google/gemini/v1beta/models/{model}:streamGenerateContent
-    out:
-      expr: '"/v1/google/v1/publishers/google/models/" + pathParams.model + ":streamGenerateContent"'
-    methods:
-      - POST
+      - in: /google/gemini/v1beta/models/{model}:streamGenerateContent
+        description: Streamed chat endpoint
+        out:
+          - method: POST
+            expr: |
+              "/v1/google/v1/publishers/google/models/" + pathParams.model + ":streamGenerateContent"
 
 overrides:
   global:

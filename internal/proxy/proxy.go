@@ -72,26 +72,28 @@ func (s *server) Shutdown(ctx context.Context) error {
 func (s *server) combineCommonUriConfigs() (map[string]map[string]*endpointProxyConfig, error) {
 	combinedUriConfigs := make(map[string]map[string]*endpointProxyConfig)
 
-	for _, supportedUri := range s.SupportedUris {
-		endpointProxyCfgMap, err := s.buildEndpointProxyConfigs(supportedUri)
-		if err != nil {
-			return nil, err
-		}
-
-		existingEndpointProxyCfgMap, ok := combinedUriConfigs[supportedUri.In]
-		if !ok {
-			combinedUriConfigs[supportedUri.In] = endpointProxyCfgMap
-			continue
-		}
-
-		for httpMethod, endpointProxyCfg := range endpointProxyCfgMap {
-			if _, ok := existingEndpointProxyCfgMap[httpMethod]; ok {
-				return nil, fmt.Errorf("route %s has multiple uris configs mapped to the http method \"%s\"",
-					supportedUri.In, httpMethod,
-				)
+	for _, uriGroup := range s.UriGroups {
+		for _, supportedUri := range uriGroup.SupportedUris {
+			endpointProxyCfgMap, err := s.buildEndpointProxyConfigs(supportedUri)
+			if err != nil {
+				return nil, err
 			}
 
-			existingEndpointProxyCfgMap[httpMethod] = endpointProxyCfg
+			existingEndpointProxyCfgMap, ok := combinedUriConfigs[supportedUri.In]
+			if !ok {
+				combinedUriConfigs[supportedUri.In] = endpointProxyCfgMap
+				continue
+			}
+
+			for httpMethod, endpointProxyCfg := range endpointProxyCfgMap {
+				if _, ok := existingEndpointProxyCfgMap[httpMethod]; ok {
+					return nil, fmt.Errorf("route %s has multiple uris configs mapped to the http method \"%s\"",
+						supportedUri.In, httpMethod,
+					)
+				}
+
+				existingEndpointProxyCfgMap[httpMethod] = endpointProxyCfg
+			}
 		}
 	}
 
@@ -112,10 +114,13 @@ func (s *server) buildEndpointProxyConfigs(uriMap config.UriMap) (map[string]*en
 		return nil, err
 	}
 
-	for _, httpMethod := range uriMap.Methods {
+	for _, outMethod := range uriMap.Out {
+		httpMethod := outMethod.Method
+
 		endpointProxyCfg := &endpointProxyConfig{
 			baseEndpoint:    target,
 			UriMap:          uriMap,
+			Out:             outMethod,
 			RequestResponse: s.Overrides.Global,
 		}
 

@@ -154,15 +154,15 @@ func (a *App) ClearLogs() {
 
 // EndpointsResponse is the structure returned to the frontend
 type EndpointsResponse struct {
-	BaseEndpoint string          `json:"baseEndpoint"`
-	Endpoints    []config.UriMap `json:"endpoints"`
+	BaseEndpoint string            `json:"baseEndpoint"`
+	UriGroups    []config.UriGroup `json:"uriGroups"`
 }
 
 // GetEndpoints returns the configured base endpoint and supported URI mappings.
 func (a *App) GetEndpoints() (*EndpointsResponse, error) {
 	return &EndpointsResponse{
 		BaseEndpoint: a.config.BaseEndpoint,
-		Endpoints:    a.config.SupportedUris,
+		UriGroups:    a.config.UriGroups,
 	}, nil
 }
 

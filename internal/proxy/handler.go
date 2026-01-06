@@ -23,6 +23,7 @@ type endpointProxyConfig struct {
 	baseEndpoint *url.URL
 
 	config.UriMap
+	Out config.OutMethod
 	config.RequestResponse
 }
 

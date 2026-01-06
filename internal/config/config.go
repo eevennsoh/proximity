@@ -15,16 +15,26 @@ const (
 )
 
 type Config struct {
-	BaseEndpoint  string    `yaml:"baseEndpoint"`
-	SupportedUris []UriMap  `yaml:"supportedUris"`
-	Overrides     Overrides `yaml:"overrides"`
+	BaseEndpoint string     `yaml:"baseEndpoint"`
+	UriGroups    []UriGroup `yaml:"uriGroups"`
+	Overrides    Overrides  `yaml:"overrides"`
+}
+
+type UriGroup struct {
+	Name          string   `yaml:"name" json:"name"`
+	SupportedUris []UriMap `yaml:"supportedUris" json:"supportedUris"`
 }
 
 type UriMap struct {
-	In           string   `yaml:"in" json:"in"`
-	Out          Input    `yaml:"out" json:"out"`
-	BaseEndpoint string   `yaml:"baseEndpoint" json:"baseEndpoint,omitempty"`
-	Methods      []string `yaml:"methods" json:"methods,omitempty"`
+	In           string      `yaml:"in" json:"in"`
+	Description  string      `yaml:"description" json:"description,omitempty"`
+	Out          []OutMethod `yaml:"out" json:"out"`
+	BaseEndpoint string      `yaml:"baseEndpoint" json:"baseEndpoint,omitempty"`
+}
+
+type OutMethod struct {
+	Method string `yaml:"method" json:"method"`
+	Input  `yaml:",inline"`
 }
 
 type Overrides struct {
