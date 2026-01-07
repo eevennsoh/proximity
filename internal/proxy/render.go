@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
+	"bitbucket.org/atlassian-developers/proximity/internal/config"
 )
 
 type HttpRequest struct {

@@ -1,4 +1,4 @@
-module bitbucket.org/atlassian-developers/mini-proxy
+module bitbucket.org/atlassian-developers/proximity
 
 go 1.24.2
 

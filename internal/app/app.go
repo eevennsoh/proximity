@@ -12,9 +12,9 @@ import (
 	"strings"
 	"sync"
 
-	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
-	"bitbucket.org/atlassian-developers/mini-proxy/internal/proxy"
-	"bitbucket.org/atlassian-developers/mini-proxy/internal/settings"
+	"bitbucket.org/atlassian-developers/proximity/internal/config"
+	"bitbucket.org/atlassian-developers/proximity/internal/proxy"
+	"bitbucket.org/atlassian-developers/proximity/internal/settings"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"gopkg.in/yaml.v3"
 )

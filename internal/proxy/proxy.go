@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
-	"bitbucket.org/atlassian-developers/mini-proxy/internal/template"
+	"bitbucket.org/atlassian-developers/proximity/internal/config"
+	"bitbucket.org/atlassian-developers/proximity/internal/template"
 
 	"github.com/go-chi/chi"
 )

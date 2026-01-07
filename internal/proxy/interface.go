@@ -4,8 +4,8 @@ import (
 	"context"
 	"log"
 
-	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
-	"bitbucket.org/atlassian-developers/mini-proxy/internal/settings"
+	"bitbucket.org/atlassian-developers/proximity/internal/config"
+	"bitbucket.org/atlassian-developers/proximity/internal/settings"
 )
 
 type Options struct {

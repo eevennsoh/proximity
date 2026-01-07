@@ -11,7 +11,7 @@ import (
 	"net/url"
 	"strings"
 
-	"bitbucket.org/atlassian-developers/mini-proxy/internal/config"
+	"bitbucket.org/atlassian-developers/proximity/internal/config"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	"github.com/go-chi/chi"
