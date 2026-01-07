@@ -11,7 +11,7 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/mac"
 
-	"bitbucket.org/atlassian-developers/mini-proxy/internal/app"
+	"bitbucket.org/atlassian-developers/proximity/internal/app"
 )
 
 const (
