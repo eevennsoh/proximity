@@ -215,7 +215,7 @@ curl -X POST "http://localhost:29576/google/gemini/v1beta/models/gemini-2.5-pro:
 
 ### Multiple Use-Cases via Profiles
 
-Proximity supports multiple simultaneous use-cases through profiles. Each profile can have its own Atlassian Cloud ID, use case ID, and AD group for authentication. This allows you to route requests to with AI-Gateway auth configurations without restarting the proxy.
+Proximity supports multiple simultaneous use-cases through profiles. Each profile can have its own Atlassian Cloud ID, use case ID, and AD group for authentication. This allows you to route requests to AI-Gateway with different auth configurations without restarting the proxy.
 
 **Route via URL prefix:**
 
