@@ -124,7 +124,7 @@ overrides:
           name: Authorization
           expr: |
             let adGroupList = get(settings, "adGroup") != nil ? [get(settings, "adGroup")] : [];
-            "slauth " + slauthtoken(adGroupList, "ai-gateway", "staging")
+            "slauth " + slauthtoken(adGroupList, "ai-gateway", get(settings, "aiGatewayEnv") ?? "staging")
 
     response:
       headers:
