@@ -12,13 +12,13 @@ import (
 )
 
 type Struct struct {
-	AutoStartProxy bool              `yaml:"autoStartProxy"`
-	Vars           map[string]string `yaml:"vars"`
+	AutoStartProxy bool           `yaml:"autoStartProxy" toml:"autoStartProxy"`
+	Vars           map[string]any `yaml:"vars" toml:"vars"`
 }
 
 var defaultSettings Struct = Struct{
 	AutoStartProxy: false,
-	Vars:           make(map[string]string),
+	Vars:           make(map[string]any),
 }
 
 func Read(settingsPath string) (*Struct, error) {

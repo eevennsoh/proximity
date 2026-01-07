@@ -236,21 +236,24 @@ func (r *Renderer) slauthtokenFn(groups []string, audience string, environment s
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	token, exists := r.permanentStorage["token"]
+	// Build a cache key that includes all parameters
+	cacheKey := fmt.Sprintf("token:%s:%s:%s", strings.Join(groups, ","), audience, environment)
+
+	token, exists := r.permanentStorage[cacheKey]
 
 	// If there is an existing token and it is still valid then use it.
 	if exists && !r.tokenHasExpired(token) {
-		r.logger.Println("use existing token")
+		r.logger.Printf("use existing token for %s", cacheKey)
 		return token, nil
 	}
 
-	r.logger.Println("requesting slauth token")
+	r.logger.Printf("requesting slauth token for %s", cacheKey)
 
 	token, err := r.requestSlauthToken(groups, audience, environment)
 	if err != nil {
 		return "", err
 	}
 
-	r.permanentStorage["token"] = token
+	r.permanentStorage[cacheKey] = token
 	return token, nil
 }

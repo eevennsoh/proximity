@@ -135,6 +135,12 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 			return
 		}
 
+		// Check if this is a forward route
+		if cfg.UriMap.Forward != nil {
+			s.handleForward(w, r, cfg.UriMap.Forward, templateInput)
+			return
+		}
+
 		if cfg.Out.IsEmpty() {
 			s.serveHeadlessResponse(w, r, cfg, templateInput)
 			return
@@ -153,6 +159,34 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 		proxyHandler := s.endpointProxy(cfg)
 		proxyHandler.ServeHTTP(w, r)
 	}
+}
+
+func (s *server) handleForward(w http.ResponseWriter, r *http.Request, fwd *config.Forward, templateInput map[string]any) {
+	// Evaluate path expression
+	pathBytes, err := s.renderer.Render(fwd.Path.Template, fwd.Path.Expr, templateInput, nil)
+	if err != nil {
+		s.Logger.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	newPath := string(pathBytes)
+
+	// Clone request with new path
+	newReq := r.Clone(r.Context())
+	newReq.URL.Path = newPath
+	newReq.RequestURI = newPath
+
+	if err := s.overrideHeaders(fwd.Headers, &newReq.Header, templateInput); err != nil {
+		s.Logger.Println(err)
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	s.Logger.Printf("forwarding request to %s", newPath)
+
+	// Re-route through router
+	s.router.ServeHTTP(w, newReq)
 }
 
 func (s *server) endpointProxy(cfg *endpointProxyConfig) *httputil.ReverseProxy {

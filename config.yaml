@@ -4,6 +4,18 @@ baseEndpoint: |
 
 uriGroups:
 
+  - name: Profile Router
+    supportedUris:
+      - in: /p/{profile}/*
+        description: Profile router
+        forward:
+          path:
+            expr: '"/" + pathParams["*"]'
+          headers:
+            - op: add
+              name: X-Proximity-Profile
+              expr: pathParams.profile
+
   - name: OpenAI
     supportedUris:
       - in: /openai/v1/chat/completions
@@ -116,14 +128,30 @@ overrides:
 
         - op: add
           name: X-Atlassian-CloudId
-          expr: get(settings, "atlassianCloudId") ?? "a436116f-02ce-4520-8fbb-7301462a1674"
+          expr: |
+            let profileHeader = get(headers, "X-Proximity-Profile");
+            let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+            let profile = filter(settings.profiles, #.name == profileName)[0];
+            get(profile, "atlassianCloudId") ?? get(settings, "atlassianCloudId") ?? "a436116f-02ce-4520-8fbb-7301462a1674"
+
         - op: add
           name: X-Atlassian-UseCaseId
-          expr: settings.useCaseId
+          expr: |
+            let profileHeader = get(headers, "X-Proximity-Profile");
+            let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+            let profile = filter(settings.profiles, #.name == profileName)[0];
+            get(profile, "useCaseId")
+
         - op: add
           name: Authorization
           expr: |
-            let adGroupList = get(settings, "adGroup") != nil ? [get(settings, "adGroup")] : [];
+            let profileHeader = get(headers, "X-Proximity-Profile");
+            let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+            let profile = filter(settings.profiles, #.name == profileName)[0];
+
+            let adGroup = get(profile, "adGroup");
+            let adGroupList = adGroup != nil ? [adGroup] : [];
+
             "slauth " + slauthtoken(adGroupList, "ai-gateway", get(settings, "aiGatewayEnv") ?? "staging")
 
     response:

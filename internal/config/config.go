@@ -28,8 +28,14 @@ type UriGroup struct {
 type UriMap struct {
 	In           string      `yaml:"in" json:"in"`
 	Description  string      `yaml:"description" json:"description,omitempty"`
-	Out          []OutMethod `yaml:"out" json:"out"`
+	Out          []OutMethod `yaml:"out" json:"out,omitempty"`
 	BaseEndpoint string      `yaml:"baseEndpoint" json:"baseEndpoint,omitempty"`
+	Forward      *Forward    `yaml:"forward" json:"forward,omitempty"`
+}
+
+type Forward struct {
+	Path    Input    `yaml:"path"`
+	Headers []Header `yaml:"headers"`
 }
 
 type OutMethod struct {
