@@ -237,8 +237,6 @@ curl -X POST http://localhost:29576/openai/v1/chat/completions \
   -d '{"model": "gpt-5-2025-08-07", "messages": [{"role": "user", "content": "Hello!"}]}'
 ```
 
-See [Profile Configuration](#profile-configuration) for how to set up profiles.
-
 ## Configuration
 
 ### Settings File
