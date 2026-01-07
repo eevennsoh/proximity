@@ -217,6 +217,8 @@ curl -X POST "http://localhost:29576/google/gemini/v1beta/models/gemini-2.5-pro:
 
 Proximity supports multiple simultaneous use-cases through profiles. Each profile can have its own Atlassian Cloud ID, use case ID, and AD group for authentication. This allows you to route requests to AI-Gateway with different auth configurations without restarting the proxy.
 
+> **Note:** If you only have a single profile defined, you don't need to use the `/p/{profile}/...` URL prefix or `X-Proximity-Profile` header. The default routes (e.g., `/openai/v1/chat/completions`) will automatically use your single profile.
+
 **Route via URL prefix:**
 
 ```bash
@@ -265,8 +267,6 @@ useCaseId = "project-a-use-case"
 adGroup = "project-a-ad-group"
 ```
 
-> **Note:** If you only have a single profile defined, you don't need to use the `/p/{profile}/...` URL prefix or `X-Proximity-Profile` header. The default routes (e.g., `/openai/v1/chat/completions`) will automatically use your single profile.
-
 ### Settings Options
 
 | Option | Type | Description |
@@ -274,7 +274,7 @@ adGroup = "project-a-ad-group"
 | `autoStartProxy` | boolean | Automatically start the proxy when the app launches |
 | `vars.aiGatewayEnv` | string | AI-Gateway environment: `"staging"` or `"prod"` |
 | `vars.defaultProfile` | string | Default profile name to use |
-| `vars.atlassianCloudId` | string | Fallback Atlassian Cloud ID |
+| `vars.atlassianCloudId` | string | Override Atlassian Cloud ID |
 | `vars.profiles` | array | List of named authentication profiles |
 
 ### Profile Configuration
