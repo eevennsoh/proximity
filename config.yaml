@@ -5,6 +5,7 @@ baseEndpoint: |
 uriGroups:
 
   - name: Profile Router
+    hidden: true
     supportedUris:
       - in: /p/{profile}/*
         description: Profile router

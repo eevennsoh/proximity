@@ -163,10 +163,19 @@ type EndpointsResponse struct {
 }
 
 // GetEndpoints returns the configured base endpoint and supported URI mappings.
+// Hidden URI groups are filtered out from the response.
 func (a *App) GetEndpoints() (*EndpointsResponse, error) {
+	visibleGroups := make([]config.UriGroup, 0, len(a.config.UriGroups))
+
+	for _, group := range a.config.UriGroups {
+		if !group.Hidden {
+			visibleGroups = append(visibleGroups, group)
+		}
+	}
+
 	return &EndpointsResponse{
 		BaseEndpoint: a.config.BaseEndpoint,
-		UriGroups:    a.config.UriGroups,
+		UriGroups:    visibleGroups,
 	}, nil
 }
 

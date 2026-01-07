@@ -22,6 +22,7 @@ type Config struct {
 
 type UriGroup struct {
 	Name          string   `yaml:"name" json:"name"`
+	Hidden        bool     `yaml:"hidden" json:"hidden,omitempty"`
 	SupportedUris []UriMap `yaml:"supportedUris" json:"supportedUris"`
 }
 
