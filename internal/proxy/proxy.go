@@ -55,13 +55,6 @@ func (s *server) RunServer(ctx context.Context) {
 
 	for uri, endpointProxyCfgMap := range combinedUriConfigs {
 		for method, cfg := range endpointProxyCfgMap {
-
-			// Forward routes use Handle() to match all HTTP methods
-			if cfg.UriMap.Forward != nil {
-				s.router.Handle(uri, s.handleEndpoint(cfg))
-				break // Only need to register once for all methods
-			}
-
 			s.router.Method(method, uri, s.handleEndpoint(cfg))
 		}
 	}
@@ -110,11 +103,6 @@ func (s *server) combineCommonUriConfigs() (map[string]map[string]*endpointProxy
 func (s *server) buildEndpointProxyConfigs(uriMap config.UriMap) (map[string]*endpointProxyConfig, error) {
 	endpointProxyConfigMap := make(map[string]*endpointProxyConfig)
 
-	// Check if this is a forward route
-	if uriMap.Forward != nil {
-		return s.buildForwardRouteConfig(uriMap)
-	}
-
 	baseEndpoint, err := s.getBaseEndpoint(uriMap)
 	if err != nil {
 		return nil, err
@@ -151,17 +139,6 @@ func (s *server) buildEndpointProxyConfigs(uriMap config.UriMap) (map[string]*en
 	return endpointProxyConfigMap, nil
 }
 
-func (s *server) buildForwardRouteConfig(uriMap config.UriMap) (map[string]*endpointProxyConfig, error) {
-	cfg := &endpointProxyConfig{
-		UriMap: uriMap,
-	}
-
-	// Single entry - actual registration uses router.Handle() for all methods
-	return map[string]*endpointProxyConfig{
-		"*": cfg,
-	}, nil
-}
-
 func (s *server) getBaseEndpoint(uriMap config.UriMap) (string, error) {
 	if uriMap.BaseEndpoint != "" {
 		return uriMap.BaseEndpoint, nil
@@ -182,10 +159,19 @@ func (s *server) getBaseEndpoint(uriMap config.UriMap) (string, error) {
 
 // Merge two config.RequestResponse structs, extending header lists and merging bodies.
 func mergeRequestResponse(a, b config.RequestResponse) config.RequestResponse {
-	return config.RequestResponse{
+	merged := config.RequestResponse{
 		Request:  mergeOverrideConfig(a.Request, b.Request),
 		Response: mergeOverrideConfig(a.Response, b.Response),
 	}
+
+	// Forward from b takes precedence if set
+	if b.Forward != nil {
+		merged.Forward = b.Forward
+	} else {
+		merged.Forward = a.Forward
+	}
+
+	return merged
 }
 
 func mergeOverrideConfig(a, b config.OverrideConfig) config.OverrideConfig {

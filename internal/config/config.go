@@ -31,7 +31,6 @@ type UriMap struct {
 	Description  string      `yaml:"description" json:"description,omitempty"`
 	Out          []OutMethod `yaml:"out" json:"out,omitempty"`
 	BaseEndpoint string      `yaml:"baseEndpoint" json:"baseEndpoint,omitempty"`
-	Forward      *Forward    `yaml:"forward" json:"forward,omitempty"`
 }
 
 type Forward struct {
@@ -53,6 +52,7 @@ type Overrides struct {
 }
 
 type RequestResponse struct {
+	Forward  *Forward       `yaml:"forward,omitempty"`
 	Request  OverrideConfig `yaml:"request,omitempty"`
 	Response OverrideConfig `yaml:"response,omitempty"`
 }

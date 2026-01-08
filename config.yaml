@@ -8,14 +8,10 @@ uriGroups:
     hidden: true
     supportedUris:
       - in: /p/{profile}/*
-        description: Profile router
-        forward:
-          path:
-            expr: '"/" + pathParams["*"]'
-          headers:
-            - op: add
-              name: X-Proximity-Profile
-              expr: pathParams.profile
+        out:
+          - method: GET
+          - method: POST
+          - method: OPTIONS
 
   - name: OpenAI
     supportedUris:
@@ -165,6 +161,20 @@ overrides:
           text: application/json
 
   uris:
+    /p/{profile}/*:
+      GET: &forwarding_config
+        forward:
+          path:
+            expr: '"/" + pathParams["*"]'
+          headers:
+            - op: add
+              name: X-Proximity-Profile
+              expr: pathParams.profile
+
+      POST: *forwarding_config
+      OPTIONS: *forwarding_config
+
+
     /openai/v1/chat/completions:
       POST:
         request:

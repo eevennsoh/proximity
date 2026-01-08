@@ -136,8 +136,8 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 		}
 
 		// Check if this is a forward route
-		if cfg.UriMap.Forward != nil {
-			s.handleForward(w, r, cfg.UriMap.Forward, templateInput)
+		if cfg.RequestResponse.Forward != nil {
+			s.handleForward(w, r, cfg.RequestResponse.Forward, templateInput)
 			return
 		}
 
