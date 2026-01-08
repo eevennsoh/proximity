@@ -14,8 +14,14 @@ SETTINGS_PATH_DEV = /.config/proximity/settings-dev
 
 MODELS = $(shell cat models.json | base64 | tr -d "\n")
 
-BUILD_LD_FLAGS = -X 'main.Config=$(CONFIG)' -X 'main.TemplateVariables=$(MODELS)' -X 'main.Port=29576' -X 'main.SettingsPath=$(SETTINGS_PATH)' -X 'main.Version=$(VERSION)'
-BUILD_LD_FLAGS_DEV = -X 'main.Config=$(CONFIG_DEV)' -X 'main.TemplateVariables=$(MODELS)' -X 'main.Port=29575' -X 'main.SettingsPath=$(SETTINGS_PATH_DEV)' -X 'main.Version=$(VERSION)'
+VERSION_URL = "https://statlas.prod.atl-paas.net/vportella/proximity/version.json"
+
+BUILD_LD_FLAGS_COMMON = -X 'main.TemplateVariables=$(MODELS)'\
+	-X 'main.Version=$(VERSION)' \
+	-X 'bitbucket.org/atlassian-developers/proximity/internal/update.versionUrl=$(VERSION_URL)'
+
+BUILD_LD_FLAGS        = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG)' -X 'main.Port=29576' -X 'main.SettingsPath=$(SETTINGS_PATH)'
+BUILD_LD_FLAGS_DEV    = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG_DEV)' -X 'main.Port=29575' -X 'main.SettingsPath=$(SETTINGS_PATH_DEV)'
 
 .PHONY: run build package
 .DEFAULT_GOAL := run
@@ -39,17 +45,29 @@ package: build
 	echo "Created $$out"
 
 publish:
+	# Generate version.json
+	@echo '{"version":"$(VERSION)","published_at":"'$$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' > version.json
+
+	# Upload the versioned package
 	atlas statlas put \
 		-n vportella \
 		-f proximity-$(ARCH)-$(VERSION).tar.gz \
 		--auth-group eng-compute-orchestration-kitt \
 		-s proximity/
 
+	# Upload as latest
 	mv proximity-$(ARCH)-$(VERSION).tar.gz proximity-$(ARCH)-latest.tar.gz
 
 	atlas statlas put \
 		-n vportella \
 		-f proximity-$(ARCH)-latest.tar.gz \
+		--auth-group eng-compute-orchestration-kitt \
+		-s proximity/
+
+	# Upload version manifest
+	atlas statlas put \
+		-n vportella \
+		-f version.json \
 		--auth-group eng-compute-orchestration-kitt \
 		-s proximity/
 

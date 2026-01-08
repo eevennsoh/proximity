@@ -15,6 +15,7 @@ import (
 	"bitbucket.org/atlassian-developers/proximity/internal/config"
 	"bitbucket.org/atlassian-developers/proximity/internal/proxy"
 	"bitbucket.org/atlassian-developers/proximity/internal/settings"
+	"bitbucket.org/atlassian-developers/proximity/internal/update"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 	"gopkg.in/yaml.v3"
 )
@@ -76,6 +77,10 @@ func (a *App) Startup(ctx context.Context) {
 		if err := a.StartProxy(); err != nil {
 			log.Printf("Failed to auto-start proxy: %v", err)
 		}
+	}
+
+	if err := update.NofifyIfNewVersionExists(a.version); err != nil {
+		log.Println(err)
 	}
 }
 
