@@ -9,6 +9,9 @@ import openaiLogo from "./assets/images/openai-gpt.png";
 import claudeLogo from "./assets/images/anthropic-claude.png";
 import geminiLogo from "./assets/images/google-gemini.png";
 
+// Import components
+import ChangelogModal from "./components/ChangelogModal.jsx";
+
 // Prefer the generated bindings if they exist, otherwise fall back to window.go
 // The generated file will update after running `wails dev`/`wails build`
 let API = null;
@@ -18,6 +21,30 @@ try {
 } catch (_) {
   API = null;
 }
+
+// Helper functions for tracking seen changelog versions
+const SEEN_VERSIONS_KEY = 'proximity_seen_changelog_versions';
+
+const getSeenVersions = () => {
+  try {
+    const stored = localStorage.getItem(SEEN_VERSIONS_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+};
+
+const markVersionAsSeen = (version) => {
+  const seen = getSeenVersions();
+  if (!seen.includes(version)) {
+    seen.push(version);
+    localStorage.setItem(SEEN_VERSIONS_KEY, JSON.stringify(seen));
+  }
+};
+
+const hasSeenVersion = (version) => {
+  return getSeenVersions().includes(version);
+};
 
 // Extract methods from the out array
 const getMethodsFromEndpoint = (endpoint) => {
@@ -41,6 +68,8 @@ export default function App() {
   const [uriGroups, setUriGroups] = useState([]);
   const [activeTab, setActiveTab] = useState("routes");
   const [showCopiedToast, setShowCopiedToast] = useState(false);
+  const [showChangelog, setShowChangelog] = useState(false);
+  const [changelogData, setChangelogData] = useState({ version: '', changelog: '' });
 
   // Dark theme only
   const logsRef = useRef(null);
@@ -81,6 +110,27 @@ export default function App() {
         if (API?.GetPort) {
           const p = await API.GetPort();
           if (mounted) setPort(p);
+        }
+        // Fetch changelog and show it on startup (only for unseen versions)
+        if (API?.GetChangelog) {
+          const data = await API.GetChangelog();
+          if (mounted && data && data.changelog) {
+            const currentVersion = data.version || 'dev';
+            setChangelogData({ version: currentVersion, changelog: data.changelog });
+            
+            const seenVersions = getSeenVersions();
+            const isFirstTimeUser = seenVersions.length === 0;
+            const hasSeenThisVersion = seenVersions.includes(currentVersion);
+            
+            if (isFirstTimeUser) {
+              // First time user - just record the version, don't show modal
+              markVersionAsSeen(currentVersion);
+            } else if (!hasSeenThisVersion) {
+              // Existing user with a new version - show the modal
+              markVersionAsSeen(currentVersion);
+              setShowChangelog(true);
+            }
+          }
         }
       } catch (e) {
         // ignore
@@ -164,6 +214,11 @@ export default function App() {
       }
     };
   }, []);
+
+  // Handle closing the changelog modal
+  const handleCloseChangelog = () => {
+    setShowChangelog(false);
+  };
 
 
 
@@ -349,10 +404,10 @@ export default function App() {
       </main>
 
       {/* Copy to clipboard toast notification */}
-      <div 
+      <div
         className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-50 transition-all duration-300 ease-out ${
-          showCopiedToast 
-            ? 'translate-y-0 opacity-100' 
+          showCopiedToast
+            ? 'translate-y-0 opacity-100'
             : 'translate-y-8 opacity-0 pointer-events-none'
         }`}
       >
@@ -360,6 +415,15 @@ export default function App() {
           Copied to clipboard
         </div>
       </div>
+
+      {/* Changelog modal */}
+      {showChangelog && (
+        <ChangelogModal
+          version={changelogData.version}
+          changelog={changelogData.changelog}
+          onClose={handleCloseChangelog}
+        />
+      )}
     </div>
   );
 }

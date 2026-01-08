@@ -27,6 +27,7 @@ type App struct {
 	logs    bytes.Buffer
 
 	proxy             proxy.Interface
+	pipeWriter        io.WriteCloser
 	templateVariables string
 	port              int
 
@@ -36,17 +37,19 @@ type App struct {
 	settingsPath string
 	settings     *settings.Struct
 
-	version string
+	version   string
+	changelog string
 }
 
 // NewApp creates a new App application struct
-func NewApp(configPath, templateVariables string, port int, settingsPath, version string) *App {
+func NewApp(configPath, templateVariables string, port int, settingsPath, version, changelog string) *App {
 	return &App{
 		configPath:        configPath,
 		templateVariables: templateVariables,
 		port:              port,
 		settingsPath:      settingsPath,
 		version:           version,
+		changelog:         changelog,
 	}
 }
 
@@ -93,6 +96,7 @@ func (a *App) StartProxy() error {
 
 	// Create a pipe and a logger that writes to it so we can stream proxy logs to the UI
 	pr, pw := io.Pipe()
+	a.pipeWriter = pw
 	logger := log.New(pw, "", log.LstdFlags)
 
 	a.proxy = proxy.New(proxy.Options{
@@ -127,6 +131,12 @@ func (a *App) StopProxy() error {
 
 	if err := a.proxy.Shutdown(a.ctx); err != nil {
 		return err
+	}
+
+	// Close the pipe writer to unblock the pipeLogs goroutine
+	if a.pipeWriter != nil {
+		a.pipeWriter.Close()
+		a.pipeWriter = nil
 	}
 
 	a.running = false
@@ -181,6 +191,14 @@ func (a *App) GetEndpoints() (*EndpointsResponse, error) {
 
 func (a *App) GetPort() int {
 	return a.port
+}
+
+// GetChangelog returns the changelog content and version for display
+func (a *App) GetChangelog() map[string]string {
+	return map[string]string{
+		"version":   a.version,
+		"changelog": a.changelog,
+	}
 }
 
 func (a *App) pipeLogs(r io.Reader) {

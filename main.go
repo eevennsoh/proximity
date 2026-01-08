@@ -2,6 +2,7 @@ package main
 
 import (
 	"embed"
+	_ "embed"
 	"log"
 	"strconv"
 
@@ -22,6 +23,9 @@ var (
 	//go:embed all:frontend/dist
 	assets embed.FS
 
+	//go:embed CHANGELOG.md
+	changelog string
+
 	Port              string
 	Config            string
 	SettingsPath      string
@@ -41,6 +45,7 @@ func main() {
 		port,
 		SettingsPath,
 		Version,
+		changelog,
 	)
 
 	// Create application menu
