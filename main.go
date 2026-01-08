@@ -51,6 +51,7 @@ func main() {
 	// Create application menu
 	appMenu := menu.NewMenu()
 	appMenu.Append(menu.AppMenu())
+	appMenu.Append(menu.EditMenu())
 	appMenu.Append(menu.WindowMenu())
 
 	// Create application with options
