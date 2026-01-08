@@ -55,6 +55,16 @@ publish:
 
 	rm proximity-$(ARCH)-latest.tar.gz
 
+reset-changelog-history:
+	@echo "Resetting Proximity changelog history (simulates existing user with dummy version)..."
+	@db_path=$$(ls ~/Library/WebKit/com.wails.Proximity/WebsiteData/Default/*/*/LocalStorage/localstorage.sqlite3 2>/dev/null | head -1); \
+	if [ -n "$$db_path" ]; then \
+		sqlite3 "$$db_path" "DELETE FROM ItemTable WHERE key = 'proximity_seen_changelog_versions'; INSERT INTO ItemTable (key, value) VALUES ('proximity_seen_changelog_versions', X'5B00220030002E0030002E00300022005D00');"; \
+		echo "Done. localStorage now has dummy version 0.0.0. Restart the app to see the changelog modal."; \
+	else \
+		echo "No localStorage database found. Run the app first to create it."; \
+	fi
+
 # test:
 # 	go test -cover ./pkg/...
 # 	go test -cover ./cmd/...
