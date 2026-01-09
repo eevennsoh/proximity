@@ -18,7 +18,7 @@ BUILD_LD_FLAGS_COMMON = -X 'main.Version=$(VERSION)' \
 	-X 'bitbucket.org/atlassian-developers/proximity/internal/update.versionUrl=$(VERSION_URL)'
 
 BUILD_LD_FLAGS        = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG)' -X 'main.Port=29576' -X 'main.SettingsPath=$(SETTINGS_PATH)'
-BUILD_LD_FLAGS_DEV    = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG_DEV)' -X 'main.Port=29575' -X 'main.SettingsPath=$(SETTINGS_PATH_DEV)'
+BUILD_LD_FLAGS_DEV    = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG)' -X 'main.Port=29575' -X 'main.SettingsPath=$(SETTINGS_PATH_DEV)'
 
 .PHONY: run build package
 .DEFAULT_GOAL := run
@@ -65,6 +65,7 @@ publish:
 		--auth-group eng-compute-orchestration-kitt \
 		-s proximity/
 
+	rm version.json
 	rm proximity-$(ARCH)-latest.tar.gz
 
 reset-changelog-history:
