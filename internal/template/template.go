@@ -233,15 +233,27 @@ func (r *Renderer) regexReplaceFn(pattern, replacement, s string) (string, error
 }
 
 func (r *Renderer) slauthtokenFn(groups []string, audience string, environment string) (string, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-
 	// Build a cache key that includes all parameters
 	cacheKey := fmt.Sprintf("token:%s:%s:%s", strings.Join(groups, ","), audience, environment)
 
+	// First, try to get the token with a read lock
+	r.mu.RLock()
 	token, exists := r.permanentStorage[cacheKey]
+	r.mu.RUnlock()
 
 	// If there is an existing token and it is still valid then use it.
+	if exists && !r.tokenHasExpired(token) {
+		r.logger.Printf("use existing token for %s", cacheKey)
+		return token, nil
+	}
+
+	// Need to get a new token - acquire write lock
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	// Re-check after acquiring write lock since another goroutine may have already fetched it
+	token, exists = r.permanentStorage[cacheKey]
+
 	if exists && !r.tokenHasExpired(token) {
 		r.logger.Printf("use existing token for %s", cacheKey)
 		return token, nil
