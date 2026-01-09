@@ -141,6 +141,11 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 			return
 		}
 
+		// If there's a fetch config, execute it to populate the template input
+		if cfg.RequestResponse.Fetch != nil {
+			s.executeFetch(r.Context(), cfg.RequestResponse.Fetch, templateInput)
+		}
+
 		if cfg.Out.IsEmpty() {
 			s.serveHeadlessResponse(w, r, cfg, templateInput)
 			return
@@ -224,10 +229,13 @@ func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) serveHeadlessResponse(w http.ResponseWriter, r *http.Request, cfg *endpointProxyConfig, templateInput map[string]any) {
+	// Evaluate status code using the single source of truth function
+	statusCode := s.evaluateStatusCode(cfg.Response.StatusCode, templateInput)
+
 	// Create a base http.Response which can be rendered and then used to respond to the request
 	res := &http.Response{
-		StatusCode: cfg.Response.StatusCode,
-		Status:     http.StatusText(cfg.Response.StatusCode),
+		StatusCode: statusCode,
+		Status:     http.StatusText(statusCode),
 		Proto:      r.Proto,
 		ProtoMajor: r.ProtoMajor,
 		ProtoMinor: r.ProtoMinor,
@@ -383,7 +391,6 @@ func (s *server) buildTemplateInputFromRequest(req *http.Request) (map[string]an
 		"path":       req.URL.Path,
 		"pathParams": pathParamsMap,
 		"headers":    copyHeaders(req.Header),
-		"external":   s.TemplateVariables,
 		"settings":   s.Settings.Vars,
 		"version":    s.Version,
 	}
@@ -400,7 +407,6 @@ func (s *server) buildTemplateInputFromRequest(req *http.Request) (map[string]an
 func (s *server) buildTemplateInputFromResponse(res *http.Response, includeBody bool) (map[string]any, error) {
 	templateInput := map[string]any{
 		"headers":  copyHeaders(res.Header),
-		"external": s.TemplateVariables,
 		"settings": s.Settings.Vars,
 	}
 

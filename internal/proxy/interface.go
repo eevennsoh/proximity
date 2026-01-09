@@ -16,8 +16,7 @@ type Options struct {
 	Logger *log.Logger
 
 	*config.Config
-	Settings          *settings.Struct
-	TemplateVariables map[string]any
+	Settings *settings.Struct
 }
 
 type Interface interface {

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 
 	"github.com/expr-lang/expr"
 )
@@ -34,8 +35,8 @@ func (r *Renderer) RenderExpr(exprStr string, env map[string]any, temporaryStora
 		expr.Function("merge", r.exprMerge),
 		expr.Function("toCompactJson", r.exprToCompactJson),
 		expr.Function("getIndex", r.exprGetIndex),
+		expr.Function("regexReplaceAll", r.exprRegexReplaceAll),
 		// expr.Function("string", r.exprString),
-		// expr.Function("req", r.exprReq) <- Make a request and return the result. This will be useful for forwarding requests for models to the ML endpoints
 		// expr.Function("log", r.exprLog) <- Log something out using the Logger
 	}
 
@@ -307,4 +308,38 @@ func (r *Renderer) exprGetIndex(params ...any) (any, error) {
 	}
 
 	return v.Index(index).Interface(), nil
+}
+
+// exprRegexReplaceAll applies multiple regex replacements from a flat list
+func (r *Renderer) exprRegexReplaceAll(params ...any) (any, error) {
+	if len(params) != 2 {
+		return nil, fmt.Errorf("regexReplaceAll expects 2 arguments (input, replacementsList)")
+	}
+
+	input := fmt.Sprint(params[0])
+
+	items, ok := params[1].([]any)
+	if !ok {
+		return nil, fmt.Errorf("regexReplaceAll: second argument must be a list")
+	}
+
+	if len(items)%2 != 0 {
+		return nil, fmt.Errorf("regexReplaceAll: list must have even number of elements (pattern/replacement pairs)")
+	}
+
+	result := input
+
+	for i := 0; i < len(items); i += 2 {
+		pattern := fmt.Sprint(items[i])
+		replacement := fmt.Sprint(items[i+1])
+
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			return nil, fmt.Errorf("invalid regex pattern %q: %w", pattern, err)
+		}
+
+		result = re.ReplaceAllString(result, replacement)
+	}
+
+	return result, nil
 }

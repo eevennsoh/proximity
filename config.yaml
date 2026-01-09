@@ -46,7 +46,7 @@ uriGroups:
           - method: OPTIONS
           - method: POST
             expr: |
-              "/v1/bedrock/model/" + regexReplace("^(claude-.*-\\d{8})$", "anthropic.$1-v1:0", body.model) + "/invoke" + (body.stream ? "-with-response-stream" : "")
+              "/v1/bedrock/model/" + regexReplaceAll(body.model, ["^(claude-.+?-\\d{8})(-v\\d+)$", "anthropic.$1$2:0", "^(claude-.+?-\\d{8})$", "anthropic.$1-v1:0"]) + "/invoke" + (body.stream ? "-with-response-stream" : "")
 
       - in: /bedrock/claude/models
         description: Model list endpoint
@@ -64,7 +64,7 @@ uriGroups:
           - method: OPTIONS
           - method: POST
             expr: |
-              "/v1/bedrock/model/" + regexReplace("^(claude-.*-\\d{8})$", "anthropic.$1-v1:0", body.model) + "/invoke" + (body.stream ? "-with-response-stream" : "")
+              "/v1/bedrock/model/" + regexReplaceAll(body.model, ["^(claude-.+?-\\d{8})(-v\\d+)$", "anthropic.$1$2:0", "^(claude-.+?-\\d{8})$", "anthropic.$1-v1:0"]) + "/invoke" + (body.stream ? "-with-response-stream" : "")
 
       - in: /provider/bedrock/format/openai/v1/models
         description: OpenAI-compatible model list endpoint
@@ -77,7 +77,7 @@ uriGroups:
           - method: OPTIONS
           - method: POST
             expr: |
-              "/v1/google/v1/publishers/anthropic/models/" + regexReplace("^(.+)-(\\d{8})$", "$1@$2", body.model) + ":" + (body.stream ? "streamRawPredict" : "rawPredict")
+              "/v1/google/v1/publishers/anthropic/models/" + regexReplaceAll(body.model, ["-(\\d{8})(-v\\d+)$", "$2@$1", "-(\\d{8})$", "@$1"]) + ":" + (body.stream ? "streamRawPredict" : "rawPredict")
 
       - in: /vertex/claude/models
         description: Model list endpoint
@@ -222,20 +222,94 @@ overrides:
 
     /openai/v1/models:
       GET:
+        fetch:
+          requests:
+            useCaseModels:
+              method: GET
+
+              headers:
+                - op: add
+                  name: Authorization
+                  expr: |
+                    let profileHeader = get(headers, "X-Proximity-Profile");
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+                    let profile = filter(settings.profiles, #.name == profileName)[0];
+
+                    let adGroup = get(profile, "adGroup");
+                    let adGroupList = adGroup != nil ? [adGroup] : [];
+
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+
+              url:
+                expr: |
+                  let profileHeader = get(headers, "X-Proximity-Profile");
+                  let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+                  let profile = filter(settings.profiles, #.name == profileName)[0];
+                  let useCaseId = get(profile, "useCaseId");
+                  "https://mlp-config.sgw.staging.atl-paas.net/api/ai-gateway/use-case/" + useCaseId
+
+            modelList:
+              method: GET
+
+              headers:
+                - op: add
+                  name: Authorization
+                  expr: |
+                    let profileHeader = get(headers, "X-Proximity-Profile");
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+                    let profile = filter(settings.profiles, #.name == profileName)[0];
+
+                    let adGroup = get(profile, "adGroup");
+                    let adGroupList = adGroup != nil ? [adGroup] : [];
+
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+
+              url:
+                expr: |
+                  "https://mlp-config.us-east-1.staging.atl-paas.net/api/ai-gateway/model/list?pageSize=1000"
+
         response:
-          statusCode: 200
+          statusCode:
+            expr: 'requests.useCaseModels.error == "" && requests.modelList.error == "" ? 200 : 502'
+
+          headers:
+            - op: add
+              name: Content-Type
+              text: application/json
 
           body:
             expr: |
-              toCompactJson({
-                "object": "list",
-                "data": map(external.openai, true ? {
-                  "id": #,
-                  "object": "model",
-                  "created": timestamp(),
-                  "owned_by": "atlassian"
-                } : {})
-              })
+              requests.useCaseModels.error != "" || requests.modelList.error != "" ? toCompactJson({
+                error: "Failed to fetch models",
+                useCase: requests.useCaseModels.error,
+                modelList: requests.modelList.error
+              }) : (
+                let useCaseResp = fromJSON(requests.useCaseModels.body);
+                let modelListResp = fromJSON(requests.modelList.body);
+
+                let whitelistedIds = map(get(useCaseResp, "whitelist")?.offerings ?? [], #.id);
+                let allModels = get(modelListResp, "items") ?? [];
+
+                let models = filter(allModels,
+                  #.vendor == "OPENAI" && #.id in whitelistedIds
+                );
+
+                let stripPatterns = [
+                    "^anthropic\\.", "",
+                    ":0$", "",
+                    "-v1$", ""
+                ];
+
+                toCompactJson({
+                  "object": "list",
+                  "data": map(models, true ? {
+                    "id": regexReplaceAll(#.id, stripPatterns),
+                    "object": "model",
+                    "created": timestamp(),
+                    "owned_by": "atlassian"
+                  } : {})
+                })
+              )
 
 
     # Use the Bedrock provider. All models can be accessed through the proxy
@@ -243,7 +317,8 @@ overrides:
     /bedrock/claude/v1/messages:
       OPTIONS: &claude_options_response
         response:
-          statusCode: 200
+          statusCode:
+            int: 200
 
           headers:
             - op: add
@@ -317,22 +392,96 @@ overrides:
 
     /bedrock/claude/models: &bedrock_models_route
       GET:
+        fetch:
+          requests:
+            useCaseModels:
+              method: GET
+
+              headers:
+                - op: add
+                  name: Authorization
+                  expr: |
+                    let profileHeader = get(headers, "X-Proximity-Profile");
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+                    let profile = filter(settings.profiles, #.name == profileName)[0];
+
+                    let adGroup = get(profile, "adGroup");
+                    let adGroupList = adGroup != nil ? [adGroup] : [];
+
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+
+              url:
+                expr: |
+                  let profileHeader = get(headers, "X-Proximity-Profile");
+                  let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+                  let profile = filter(settings.profiles, #.name == profileName)[0];
+                  let useCaseId = get(profile, "useCaseId");
+                  "https://mlp-config.sgw.staging.atl-paas.net/api/ai-gateway/use-case/" + useCaseId
+
+            modelList:
+              method: GET
+
+              headers:
+                - op: add
+                  name: Authorization
+                  expr: |
+                    let profileHeader = get(headers, "X-Proximity-Profile");
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+                    let profile = filter(settings.profiles, #.name == profileName)[0];
+
+                    let adGroup = get(profile, "adGroup");
+                    let adGroupList = adGroup != nil ? [adGroup] : [];
+
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+
+              url:
+                expr: |
+                  "https://mlp-config.us-east-1.staging.atl-paas.net/api/ai-gateway/model/list?pageSize=1000"
+
         response:
-          statusCode: 200
+          statusCode:
+            expr: 'requests.useCaseModels.error == "" && requests.modelList.error == "" ? 200 : 502'
+
+          headers:
+            - op: add
+              name: Content-Type
+              text: application/json
 
           body:
             expr: |
-              toCompactJson({
-                data: map(external.bedrock, true ? {
-                  created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
-                  display_name: #,
-                  id: #,
-                  type: "model"
-                } : {}),
-                first_id: external.bedrock[0],
-                has_more: false,
-                last_id: external.bedrock[len(external.bedrock) - 1]
-              })
+              requests.useCaseModels.error != "" || requests.modelList.error != "" ? toCompactJson({
+                error: "Failed to fetch models",
+                useCase: requests.useCaseModels.error,
+                modelList: requests.modelList.error
+              }) : (
+                let useCaseResp = fromJSON(requests.useCaseModels.body);
+                let modelListResp = fromJSON(requests.modelList.body);
+
+                let whitelistedIds = map(get(useCaseResp, "whitelist")?.offerings ?? [], #.id);
+                let allModels = get(modelListResp, "items") ?? [];
+
+                let models = filter(allModels,
+                  #.vendor == "BEDROCK" && #.family == "claude-family" && #.id in whitelistedIds
+                );
+
+                let stripPatterns = [
+                    "^anthropic\\.", "",
+                    ":0$", "",
+                    "-v1$", ""
+                ];
+
+                toCompactJson({
+                  data: map(models, true ? {
+                    created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
+                    display_name: regexReplaceAll(#.id, stripPatterns),
+                    id: regexReplaceAll(#.id, stripPatterns),
+                    type: "model"
+                  } : {}),
+                  first_id: regexReplaceAll(models[0].id, stripPatterns),
+                  has_more: false,
+                  last_id: regexReplaceAll(models[len(models) - 1].id, stripPatterns)
+                })
+              )
 
 
     /bedrock/claude/v1/models: *bedrock_models_route
@@ -400,22 +549,98 @@ overrides:
 
     /vertex/claude/models: &vertex_models_route
       GET:
+        fetch:
+          requests:
+            useCaseModels:
+              method: GET
+
+              headers:
+                - op: add
+                  name: Authorization
+                  expr: |
+                    let profileHeader = get(headers, "X-Proximity-Profile");
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+                    let profile = filter(settings.profiles, #.name == profileName)[0];
+
+                    let adGroup = get(profile, "adGroup");
+                    let adGroupList = adGroup != nil ? [adGroup] : [];
+
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+
+              url:
+                expr: |
+                  let profileHeader = get(headers, "X-Proximity-Profile");
+                  let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+                  let profile = filter(settings.profiles, #.name == profileName)[0];
+                  let useCaseId = get(profile, "useCaseId");
+                  "https://mlp-config.sgw.staging.atl-paas.net/api/ai-gateway/use-case/" + useCaseId
+
+            modelList:
+              method: GET
+
+              headers:
+                - op: add
+                  name: Authorization
+                  expr: |
+                    let profileHeader = get(headers, "X-Proximity-Profile");
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+                    let profile = filter(settings.profiles, #.name == profileName)[0];
+
+                    let adGroup = get(profile, "adGroup");
+                    let adGroupList = adGroup != nil ? [adGroup] : [];
+
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+
+              url:
+                expr: |
+                  "https://mlp-config.us-east-1.staging.atl-paas.net/api/ai-gateway/model/list?pageSize=1000"
+
         response:
-          statusCode: 200
+          statusCode:
+            expr: 'requests.useCaseModels.error == "" && requests.modelList.error == "" ? 200 : 502'
+
+          headers:
+            - op: add
+              name: Content-Type
+              text: application/json
 
           body:
             expr: |
-              toCompactJson({
-                data: map(external.vertex, true ? {
-                  created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
-                  display_name: #,
-                  id: #,
-                  type: "model"
-                } : {}),
-                first_id: external.vertex[0],
-                has_more: false,
-                last_id: external.vertex[len(external.vertex) - 1]
-              })
+              requests.useCaseModels.error != "" || requests.modelList.error != "" ? toCompactJson({
+                error: "Failed to fetch models",
+                useCase: requests.useCaseModels.error,
+                modelList: requests.modelList.error
+              }) : (
+                let useCaseResp = fromJSON(requests.useCaseModels.body);
+                let modelListResp = fromJSON(requests.modelList.body);
+
+                let whitelistedIds = map(get(useCaseResp, "whitelist")?.offerings ?? [], #.id);
+                let allModels = get(modelListResp, "items") ?? [];
+
+                // Not include that specific model because it doesn't work through AI-Gateway
+                // It seems to be a duplicate of the correct id which include "-" instead of "."
+                let models = filter(allModels,
+                  #.vendor == "GOOGLE" && #.family == "claude-family" && #.id != "claude-haiku-4.5@20251001" && #.id in whitelistedIds
+                );
+
+                let stripPatterns = [
+                  "-v1@(\\d+)$", "-$1",
+                  "(-v\\d+)@(\\d+)$", "-$2$1",
+                  "@(\\d+)$", "-$1"
+                ];
+
+                toCompactJson({
+                  data: map(models, true ? {
+                    created_at: formattedTimestamp("2006-01-02T15:04:05Z"),
+                    display_name: regexReplaceAll(#.id, stripPatterns),
+                    id: regexReplaceAll(#.id, stripPatterns),
+                    type: "model"
+                  } : {}),
+                  first_id: regexReplaceAll(models[0].id, stripPatterns),
+                  has_more: false,
+                  last_id: regexReplaceAll(models[len(models) - 1].id, stripPatterns)
+                })
+              )
 
 
     /vertex/claude/v1/models: *vertex_models_route
@@ -740,17 +965,91 @@ overrides:
 
     /provider/bedrock/format/openai/v1/models:
       GET:
+        fetch:
+          requests:
+            useCaseModels:
+              method: GET
+
+              headers:
+                - op: add
+                  name: Authorization
+                  expr: |
+                    let profileHeader = get(headers, "X-Proximity-Profile");
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+                    let profile = filter(settings.profiles, #.name == profileName)[0];
+
+                    let adGroup = get(profile, "adGroup");
+                    let adGroupList = adGroup != nil ? [adGroup] : [];
+
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+
+              url:
+                expr: |
+                  let profileHeader = get(headers, "X-Proximity-Profile");
+                  let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+                  let profile = filter(settings.profiles, #.name == profileName)[0];
+                  let useCaseId = get(profile, "useCaseId");
+                  "https://mlp-config.sgw.staging.atl-paas.net/api/ai-gateway/use-case/" + useCaseId
+
+            modelList:
+              method: GET
+
+              headers:
+                - op: add
+                  name: Authorization
+                  expr: |
+                    let profileHeader = get(headers, "X-Proximity-Profile");
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
+                    let profile = filter(settings.profiles, #.name == profileName)[0];
+
+                    let adGroup = get(profile, "adGroup");
+                    let adGroupList = adGroup != nil ? [adGroup] : [];
+
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+
+              url:
+                expr: |
+                  "https://mlp-config.us-east-1.staging.atl-paas.net/api/ai-gateway/model/list?pageSize=1000"
+
         response:
-          statusCode: 200
+          statusCode:
+            expr: 'requests.useCaseModels.error == "" && requests.modelList.error == "" ? 200 : 502'
+
+          headers:
+            - op: add
+              name: Content-Type
+              text: application/json
 
           body:
             expr: |
-              toCompactJson({
-                "object": "list",
-                "data": map(external.bedrock, true ? {
-                  "id": #,
-                  "object": "model",
-                  "created": timestamp(),
-                  "owned_by": "atlassian"
-                } : {})
-              })
+              requests.useCaseModels.error != "" || requests.modelList.error != "" ? toCompactJson({
+                error: "Failed to fetch models",
+                useCase: requests.useCaseModels.error,
+                modelList: requests.modelList.error
+              }) : (
+                let useCaseResp = fromJSON(requests.useCaseModels.body);
+                let modelListResp = fromJSON(requests.modelList.body);
+
+                let whitelistedIds = map(get(useCaseResp, "whitelist")?.offerings ?? [], #.id);
+                let allModels = get(modelListResp, "items") ?? [];
+
+                let models = filter(allModels,
+                  #.vendor == "BEDROCK" && #.family == "claude-family" && #.id in whitelistedIds
+                );
+
+                let stripPatterns = [
+                    "^anthropic\\.", "",
+                    ":0$", "",
+                    "-v1$", ""
+                ];
+
+                toCompactJson({
+                  "object": "list",
+                  "data": map(models, true ? {
+                    "id": regexReplaceAll(#.id, stripPatterns),
+                    "object": "model",
+                    "created": timestamp(),
+                    "owned_by": "atlassian"
+                  } : {})
+                })
+              )

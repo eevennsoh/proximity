@@ -171,7 +171,37 @@ func mergeRequestResponse(a, b config.RequestResponse) config.RequestResponse {
 		merged.Forward = a.Forward
 	}
 
+	// Fetch from b takes precedence if set, but merge global request headers into each fetch request
+	if b.Fetch != nil {
+		merged.Fetch = mergeFetch(a.Request.Headers, b.Fetch)
+	} else if a.Fetch != nil {
+		merged.Fetch = mergeFetch(a.Request.Headers, a.Fetch)
+	}
+
 	return merged
+}
+
+// mergeFetch merges global request headers into each fetch request's headers
+func mergeFetch(globalHeaders []config.Header, fetch *config.Fetch) *config.Fetch {
+	if fetch == nil {
+		return nil
+	}
+
+	mergedRequests := make(map[string]config.FetchRequest)
+
+	for name, req := range fetch.Requests {
+		mergedRequests[name] = config.FetchRequest{
+			Method:  req.Method,
+			Url:     req.Url,
+			Headers: append(copyHeadersSlice(globalHeaders), copyHeadersSlice(req.Headers)...),
+			Body:    req.Body,
+			Timeout: req.Timeout,
+		}
+	}
+
+	return &config.Fetch{
+		Requests: mergedRequests,
+	}
 }
 
 func mergeOverrideConfig(a, b config.OverrideConfig) config.OverrideConfig {

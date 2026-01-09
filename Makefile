@@ -12,12 +12,9 @@ CONFIG_DEV = $(shell cat config-dev.yaml | base64 | tr -d "\n")
 SETTINGS_PATH = /.config/proximity/settings
 SETTINGS_PATH_DEV = /.config/proximity/settings-dev
 
-MODELS = $(shell cat models.json | base64 | tr -d "\n")
-
 VERSION_URL = "https://statlas.prod.atl-paas.net/vportella/proximity/version.json"
 
-BUILD_LD_FLAGS_COMMON = -X 'main.TemplateVariables=$(MODELS)'\
-	-X 'main.Version=$(VERSION)' \
+BUILD_LD_FLAGS_COMMON = -X 'main.Version=$(VERSION)' \
 	-X 'bitbucket.org/atlassian-developers/proximity/internal/update.versionUrl=$(VERSION_URL)'
 
 BUILD_LD_FLAGS        = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG)' -X 'main.Port=29576' -X 'main.SettingsPath=$(SETTINGS_PATH)'
@@ -26,13 +23,10 @@ BUILD_LD_FLAGS_DEV    = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG_DEV)' 
 .PHONY: run build package
 .DEFAULT_GOAL := run
 
-refresh-models:
-	./generate_models_json.sh
-
 run:
 	wails dev -skipbindings -ldflags "$(BUILD_LD_FLAGS_DEV)"
 
-build: refresh-models
+build:
 	wails build -skipbindings -clean -platform darwin/$(ARCH) -ldflags "$(BUILD_LD_FLAGS)"
 
 package: build
@@ -83,9 +77,8 @@ reset-changelog-history:
 		echo "No localStorage database found. Run the app first to create it."; \
 	fi
 
-# test:
-# 	go test -cover ./pkg/...
-# 	go test -cover ./cmd/...
+test:
+	go test -cover ./internal/...
 
 # lint:
 # 	golangci-lint run

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -17,7 +16,6 @@ import (
 	"bitbucket.org/atlassian-developers/proximity/internal/settings"
 	"bitbucket.org/atlassian-developers/proximity/internal/update"
 	wruntime "github.com/wailsapp/wails/v2/pkg/runtime"
-	"gopkg.in/yaml.v3"
 )
 
 // App struct
@@ -27,10 +25,9 @@ type App struct {
 	running bool
 	logs    bytes.Buffer
 
-	proxy             proxy.Interface
-	pipeWriter        io.WriteCloser
-	templateVariables string
-	port              int
+	proxy      proxy.Interface
+	pipeWriter io.WriteCloser
+	port       int
 
 	configPath string
 	config     *config.Config
@@ -43,14 +40,13 @@ type App struct {
 }
 
 // NewApp creates a new App application struct
-func NewApp(configPath, templateVariables string, port int, settingsPath, version, changelog string) *App {
+func NewApp(configPath string, port int, settingsPath, version, changelog string) *App {
 	return &App{
-		configPath:        configPath,
-		templateVariables: templateVariables,
-		port:              port,
-		settingsPath:      settingsPath,
-		version:           version,
-		changelog:         changelog,
+		configPath:   configPath,
+		port:         port,
+		settingsPath: settingsPath,
+		version:      version,
+		changelog:    changelog,
 	}
 }
 
@@ -94,24 +90,18 @@ func (a *App) StartProxy() error {
 
 	a.logs.Reset()
 
-	templateVariables, err := readTemplateVariables(a.templateVariables)
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	// Create a pipe and a logger that writes to it so we can stream proxy logs to the UI
 	pr, pw := io.Pipe()
 	a.pipeWriter = pw
 	logger := log.New(pw, "", log.LstdFlags)
 
 	a.proxy = proxy.New(proxy.Options{
-		Port:              a.port,
-		TestMode:          false,
-		Logger:            logger,
-		Config:            a.config,
-		Settings:          a.settings,
-		TemplateVariables: templateVariables,
-		Version:           a.version,
+		Port:     a.port,
+		TestMode: false,
+		Logger:   logger,
+		Config:   a.config,
+		Settings: a.settings,
+		Version:  a.version,
 	})
 
 	a.running = true
@@ -219,21 +209,6 @@ func (a *App) pipeLogs(r io.Reader) {
 		a.mu.Unlock()
 		wruntime.EventsEmit(a.ctx, "proxy:log", line)
 	}
-}
-
-func readTemplateVariables(templateVariableData string) (map[string]any, error) {
-	decodedConfig, err := base64.StdEncoding.DecodeString(strings.TrimSpace(templateVariableData))
-	if err != nil {
-		return nil, err
-	}
-
-	var templateVariables map[string]any
-
-	if err := yaml.Unmarshal([]byte(decodedConfig), &templateVariables); err != nil {
-		return nil, err
-	}
-
-	return templateVariables, nil
 }
 
 func (a *App) logSettings(logger *log.Logger) {

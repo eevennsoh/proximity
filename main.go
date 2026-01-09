@@ -26,11 +26,10 @@ var (
 	//go:embed CHANGELOG.md
 	changelog string
 
-	Port              string
-	Config            string
-	SettingsPath      string
-	TemplateVariables string
-	Version           string
+	Port         string
+	Config       string
+	SettingsPath string
+	Version      string
 )
 
 func main() {
@@ -41,7 +40,6 @@ func main() {
 
 	application := app.NewApp(
 		Config,
-		TemplateVariables,
 		port,
 		SettingsPath,
 		Version,

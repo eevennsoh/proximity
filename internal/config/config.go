@@ -38,6 +38,24 @@ type Forward struct {
 	Headers []Header `yaml:"headers"`
 }
 
+// FetchRequest defines a single HTTP request to make
+type FetchRequest struct {
+	Method  string   `yaml:"method"`
+	Url     Input    `yaml:"url"`
+	Headers []Header `yaml:"headers"`
+	Body    Input    `yaml:"body"`
+	Timeout string   `yaml:"timeout"`
+}
+
+type Fetch struct {
+	Requests map[string]FetchRequest `yaml:"requests"`
+}
+
+type StatusCodeInput struct {
+	Int  int    `yaml:"int"`
+	Expr string `yaml:"expr"`
+}
+
 type OutMethod struct {
 	Method string `yaml:"method" json:"method"`
 	Input  `yaml:",inline"`
@@ -53,15 +71,16 @@ type Overrides struct {
 
 type RequestResponse struct {
 	Forward  *Forward       `yaml:"forward,omitempty"`
+	Fetch    *Fetch         `yaml:"fetch,omitempty"`
 	Request  OverrideConfig `yaml:"request,omitempty"`
 	Response OverrideConfig `yaml:"response,omitempty"`
 }
 
 type OverrideConfig struct {
 	// StatusCode is only used if uriMap.Out is not defined, otherwise it forwards the upstream response status code
-	StatusCode int      `yaml:"statusCode"`
-	Headers    []Header `yaml:"headers"`
-	Body       Body     `yaml:"body"`
+	StatusCode StatusCodeInput `yaml:"statusCode"`
+	Headers    []Header        `yaml:"headers"`
+	Body       Body            `yaml:"body"`
 }
 
 type Input struct {

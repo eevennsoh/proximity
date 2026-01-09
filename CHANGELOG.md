@@ -1,6 +1,7 @@
 
 ### New Features
 - **Update Notifications**: A system notification is now sent on startup if a new version of Proximity is available.
+- **Dynamic Model Lists**: The /models endpoints now fetch live model data from the ML Platform service, returning only allowlisted models for your configured use-case.
 
 ### Breaking Changes
 - **Profiles**: Added support for using multiple use-cases. Profiles define an Atlassian Cloud ID, use case ID, and AD group. Each let's you route requests to AI-Gateway using it's own configuration.
