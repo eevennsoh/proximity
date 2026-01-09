@@ -54,12 +54,13 @@ func main() {
 
 	// Create application with options
 	err = wails.Run(&options.App{
-		Title:           name,
-		Width:           1024,
-		Height:          768,
-		CSSDragProperty: "--wails-draggable",
-		CSSDragValue:    "drag",
-		Menu:            appMenu,
+		Title:                    name,
+		Width:                    1024,
+		Height:                   768,
+		CSSDragProperty:          "--wails-draggable",
+		CSSDragValue:             "drag",
+		Menu:                     appMenu,
+		EnableDefaultContextMenu: false,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
 		},
