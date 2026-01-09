@@ -373,8 +373,6 @@ proximity/
 │   │   ├── App.jsx           # Main UI component
 │   │   └── assets/           # Images and fonts
 │   └── wailsjs/              # Generated Wails bindings
-├── cmd/
-│   └── template_tester/      # Template testing utility
 └── build/                    # Application icons and build config
 ```
 
