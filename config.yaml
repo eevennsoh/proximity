@@ -46,7 +46,7 @@ uriGroups:
           - method: OPTIONS
           - method: POST
             expr: |
-              "/v1/bedrock/model/" + regexReplaceAll(body.model, ["^(claude-.+?-\\d{8})(-v\\d+)$", "anthropic.$1$2:0", "^(claude-.+?-\\d{8})$", "anthropic.$1-v1:0"]) + "/invoke" + (body.stream ? "-with-response-stream" : "")
+              "/v1/bedrock/model/" + regexReplaceAll(body.model, ["^(claude-.+?-\\d{8})(-v\\d+)$", "anthropic.$1$2:0", "^(claude-.+?-\\d{8})$", "anthropic.$1-v1:0"]) + "/invoke" + ((get(body, "stream") ?? false) ? "-with-response-stream" : "")
 
       - in: /bedrock/claude/models
         description: Model list endpoint
@@ -64,7 +64,7 @@ uriGroups:
           - method: OPTIONS
           - method: POST
             expr: |
-              "/v1/bedrock/model/" + regexReplaceAll(body.model, ["^(claude-.+?-\\d{8})(-v\\d+)$", "anthropic.$1$2:0", "^(claude-.+?-\\d{8})$", "anthropic.$1-v1:0"]) + "/invoke" + (body.stream ? "-with-response-stream" : "")
+              "/v1/bedrock/model/" + regexReplaceAll(body.model, ["^(claude-.+?-\\d{8})(-v\\d+)$", "anthropic.$1$2:0", "^(claude-.+?-\\d{8})$", "anthropic.$1-v1:0"]) + "/invoke" + ((get(body, "stream") ?? false) ? "-with-response-stream" : "")
 
       - in: /provider/bedrock/format/openai/v1/models
         description: OpenAI-compatible model list endpoint
@@ -77,7 +77,7 @@ uriGroups:
           - method: OPTIONS
           - method: POST
             expr: |
-              "/v1/google/v1/publishers/anthropic/models/" + regexReplaceAll(body.model, ["-(\\d{8})(-v\\d+)$", "$2@$1", "-(\\d{8})$", "@$1"]) + ":" + (body.stream ? "streamRawPredict" : "rawPredict")
+              "/v1/google/v1/publishers/anthropic/models/" + regexReplaceAll(body.model, ["-(\\d{8})(-v\\d+)$", "$2@$1", "-(\\d{8})$", "@$1"]) + ":" + ((get(body, "stream") ?? false) ? "streamRawPredict" : "rawPredict")
 
       - in: /vertex/claude/models
         description: Model list endpoint
