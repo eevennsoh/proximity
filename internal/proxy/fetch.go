@@ -118,7 +118,7 @@ func (s *server) executeFetchRequest(parentCtx context.Context, req config.Fetch
 		return &RequestResult{Error: fmt.Sprintf("failed to create request: %v", err)}
 	}
 
-	if err := s.overrideHeaders(req.Headers, &httpReq.Header, templateInput); err != nil {
+	if err := s.overrideHeaders(req.Headers, &httpReq.Header, templateInput, nil); err != nil {
 		return &RequestResult{Error: fmt.Sprintf("failed to render headers: %v", err)}
 	}
 

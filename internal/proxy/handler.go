@@ -47,7 +47,7 @@ func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 			return err
 		}
 
-		if err := s.overrideHeaders(cfg.Response.Headers, &res.Header, templateInput); err != nil {
+		if err := s.overrideHeaders(cfg.Response.Headers, &res.Header, templateInput, nil); err != nil {
 			return err
 		}
 
@@ -167,8 +167,12 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 }
 
 func (s *server) handleForward(w http.ResponseWriter, r *http.Request, fwd *config.Forward, templateInput map[string]any) {
+	// Shared render storage between the path expression and the headers so data can be shared from the path expression
+	// to the header rendering
+	tmpRenderStorage := make(map[string]string)
+
 	// Evaluate path expression
-	pathBytes, err := s.renderer.Render(fwd.Path.Template, fwd.Path.Expr, templateInput, nil)
+	pathBytes, err := s.renderer.Render(fwd.Path.Template, fwd.Path.Expr, templateInput, tmpRenderStorage)
 	if err != nil {
 		s.Logger.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -182,7 +186,7 @@ func (s *server) handleForward(w http.ResponseWriter, r *http.Request, fwd *conf
 	newReq.URL.Path = newPath
 	newReq.RequestURI = newPath
 
-	if err := s.overrideHeaders(fwd.Headers, &newReq.Header, templateInput); err != nil {
+	if err := s.overrideHeaders(fwd.Headers, &newReq.Header, templateInput, tmpRenderStorage); err != nil {
 		s.Logger.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

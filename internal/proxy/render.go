@@ -43,7 +43,7 @@ func (s *server) renderRequest(req *http.Request, cfg *endpointProxyConfig, temp
 		req.RequestURI = renderedPath
 	}
 
-	if err := s.overrideHeaders(cfg.Request.Headers, &req.Header, templateInput); err != nil {
+	if err := s.overrideHeaders(cfg.Request.Headers, &req.Header, templateInput, nil); err != nil {
 		return err
 	}
 
@@ -57,7 +57,7 @@ func (s *server) renderRequest(req *http.Request, cfg *endpointProxyConfig, temp
 
 // renderResponse applies all config-driven transformations to the response and returns a new http.Reponse.
 func (s *server) renderResponse(res *http.Response, cfg *endpointProxyConfig, templateInput map[string]any) error {
-	if err := s.overrideHeaders(cfg.Response.Headers, &res.Header, templateInput); err != nil {
+	if err := s.overrideHeaders(cfg.Response.Headers, &res.Header, templateInput, nil); err != nil {
 		return err
 	}
 
@@ -137,7 +137,7 @@ func copyBody(body *io.ReadCloser) ([]byte, error) {
 // overrides all the headers and renders the header values at the end to make sure than render functions aren't called
 // for routes than they aren't included in. E.g. for headless requests if not done in two steps, the slauth token would
 // be requested even though the header gets removed after.
-func (s *server) overrideHeaders(headerOperations []config.Header, originalHeaders *http.Header, templateInput map[string]any) error {
+func (s *server) overrideHeaders(headerOperations []config.Header, originalHeaders *http.Header, templateInput map[string]any, tmpRenderStorage map[string]string) error {
 	// Track render info for headers that need it
 	headerRenderInfo := make(map[string]config.Input)
 
@@ -154,7 +154,7 @@ func (s *server) overrideHeaders(headerOperations []config.Header, originalHeade
 		}
 
 		// Use unified render to support both Template and Expr in header values
-		renderedHeaderValueBytes, err := s.renderer.Render(input.Template, input.Expr, templateInput, nil)
+		renderedHeaderValueBytes, err := s.renderer.Render(input.Template, input.Expr, templateInput, tmpRenderStorage)
 		if err != nil {
 			return err
 		}
