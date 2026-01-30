@@ -145,7 +145,7 @@ func (s *server) getBaseEndpoint(uriMap config.UriMap) (string, error) {
 	}
 
 	env := map[string]any{
-		"settings": s.Vars,
+		"globalVars": s.Vars,
 	}
 
 	baseEndpointBytes, err := s.renderer.RenderExpr(s.BaseEndpoint, env, nil)

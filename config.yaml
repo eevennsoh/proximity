@@ -1,6 +1,6 @@
 
 baseEndpoint: |
-  "https://ai-gateway.us-east-1." + get(settings, "aiGatewayEnv") ?? "staging" + ".atl-paas.net"
+  "https://ai-gateway.us-east-1." + get(globalVars, "aiGatewayEnv") ?? "staging" + ".atl-paas.net"
 
 uriGroups:
 
@@ -127,29 +127,29 @@ overrides:
           name: X-Atlassian-CloudId
           expr: |
             let profileHeader = get(headers, "X-Proximity-Profile");
-            let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-            let profile = filter(settings.profiles, #.name == profileName)[0];
-            get(profile, "atlassianCloudId") ?? get(settings, "atlassianCloudId") ?? "a436116f-02ce-4520-8fbb-7301462a1674"
+            let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+            let profile = filter(globalVars.profiles, #.name == profileName)[0];
+            get(profile, "atlassianCloudId") ?? get(globalVars, "atlassianCloudId") ?? "a436116f-02ce-4520-8fbb-7301462a1674"
 
         - op: add
           name: X-Atlassian-UseCaseId
           expr: |
             let profileHeader = get(headers, "X-Proximity-Profile");
-            let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-            let profile = filter(settings.profiles, #.name == profileName)[0];
+            let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+            let profile = filter(globalVars.profiles, #.name == profileName)[0];
             get(profile, "useCaseId")
 
         - op: add
           name: Authorization
           expr: |
             let profileHeader = get(headers, "X-Proximity-Profile");
-            let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-            let profile = filter(settings.profiles, #.name == profileName)[0];
+            let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+            let profile = filter(globalVars.profiles, #.name == profileName)[0];
 
             let adGroup = get(profile, "adGroup");
             let adGroupList = adGroup != nil ? [adGroup] : [];
 
-            "slauth " + slauthtoken(adGroupList, "ai-gateway", get(settings, "aiGatewayEnv") ?? "staging")
+            "slauth " + slauthtoken(adGroupList, "ai-gateway", get(globalVars, "aiGatewayEnv") ?? "staging")
 
     response:
       headers:
@@ -232,19 +232,19 @@ overrides:
                   name: Authorization
                   expr: |
                     let profileHeader = get(headers, "X-Proximity-Profile");
-                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-                    let profile = filter(settings.profiles, #.name == profileName)[0];
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+                    let profile = filter(globalVars.profiles, #.name == profileName)[0];
 
                     let adGroup = get(profile, "adGroup");
                     let adGroupList = adGroup != nil ? [adGroup] : [];
 
-                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(globalVars, "aiGatewayEnv") ?? "staging")
 
               url:
                 expr: |
                   let profileHeader = get(headers, "X-Proximity-Profile");
-                  let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-                  let profile = filter(settings.profiles, #.name == profileName)[0];
+                  let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+                  let profile = filter(globalVars.profiles, #.name == profileName)[0];
                   let useCaseId = get(profile, "useCaseId");
                   "https://mlp-config.sgw.staging.atl-paas.net/api/ai-gateway/use-case/" + useCaseId
 
@@ -256,13 +256,13 @@ overrides:
                   name: Authorization
                   expr: |
                     let profileHeader = get(headers, "X-Proximity-Profile");
-                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-                    let profile = filter(settings.profiles, #.name == profileName)[0];
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+                    let profile = filter(globalVars.profiles, #.name == profileName)[0];
 
                     let adGroup = get(profile, "adGroup");
                     let adGroupList = adGroup != nil ? [adGroup] : [];
 
-                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(globalVars, "aiGatewayEnv") ?? "staging")
 
               url:
                 expr: |
@@ -402,19 +402,19 @@ overrides:
                   name: Authorization
                   expr: |
                     let profileHeader = get(headers, "X-Proximity-Profile");
-                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-                    let profile = filter(settings.profiles, #.name == profileName)[0];
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+                    let profile = filter(globalVars.profiles, #.name == profileName)[0];
 
                     let adGroup = get(profile, "adGroup");
                     let adGroupList = adGroup != nil ? [adGroup] : [];
 
-                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(globalVars, "aiGatewayEnv") ?? "staging")
 
               url:
                 expr: |
                   let profileHeader = get(headers, "X-Proximity-Profile");
-                  let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-                  let profile = filter(settings.profiles, #.name == profileName)[0];
+                  let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+                  let profile = filter(globalVars.profiles, #.name == profileName)[0];
                   let useCaseId = get(profile, "useCaseId");
                   "https://mlp-config.sgw.staging.atl-paas.net/api/ai-gateway/use-case/" + useCaseId
 
@@ -426,13 +426,13 @@ overrides:
                   name: Authorization
                   expr: |
                     let profileHeader = get(headers, "X-Proximity-Profile");
-                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-                    let profile = filter(settings.profiles, #.name == profileName)[0];
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+                    let profile = filter(globalVars.profiles, #.name == profileName)[0];
 
                     let adGroup = get(profile, "adGroup");
                     let adGroupList = adGroup != nil ? [adGroup] : [];
 
-                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(globalVars, "aiGatewayEnv") ?? "staging")
 
               url:
                 expr: |
@@ -559,19 +559,19 @@ overrides:
                   name: Authorization
                   expr: |
                     let profileHeader = get(headers, "X-Proximity-Profile");
-                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-                    let profile = filter(settings.profiles, #.name == profileName)[0];
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+                    let profile = filter(globalVars.profiles, #.name == profileName)[0];
 
                     let adGroup = get(profile, "adGroup");
                     let adGroupList = adGroup != nil ? [adGroup] : [];
 
-                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(globalVars, "aiGatewayEnv") ?? "staging")
 
               url:
                 expr: |
                   let profileHeader = get(headers, "X-Proximity-Profile");
-                  let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-                  let profile = filter(settings.profiles, #.name == profileName)[0];
+                  let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+                  let profile = filter(globalVars.profiles, #.name == profileName)[0];
                   let useCaseId = get(profile, "useCaseId");
                   "https://mlp-config.sgw.staging.atl-paas.net/api/ai-gateway/use-case/" + useCaseId
 
@@ -583,13 +583,13 @@ overrides:
                   name: Authorization
                   expr: |
                     let profileHeader = get(headers, "X-Proximity-Profile");
-                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-                    let profile = filter(settings.profiles, #.name == profileName)[0];
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+                    let profile = filter(globalVars.profiles, #.name == profileName)[0];
 
                     let adGroup = get(profile, "adGroup");
                     let adGroupList = adGroup != nil ? [adGroup] : [];
 
-                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(globalVars, "aiGatewayEnv") ?? "staging")
 
               url:
                 expr: |
@@ -975,19 +975,19 @@ overrides:
                   name: Authorization
                   expr: |
                     let profileHeader = get(headers, "X-Proximity-Profile");
-                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-                    let profile = filter(settings.profiles, #.name == profileName)[0];
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+                    let profile = filter(globalVars.profiles, #.name == profileName)[0];
 
                     let adGroup = get(profile, "adGroup");
                     let adGroupList = adGroup != nil ? [adGroup] : [];
 
-                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(globalVars, "aiGatewayEnv") ?? "staging")
 
               url:
                 expr: |
                   let profileHeader = get(headers, "X-Proximity-Profile");
-                  let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-                  let profile = filter(settings.profiles, #.name == profileName)[0];
+                  let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+                  let profile = filter(globalVars.profiles, #.name == profileName)[0];
                   let useCaseId = get(profile, "useCaseId");
                   "https://mlp-config.sgw.staging.atl-paas.net/api/ai-gateway/use-case/" + useCaseId
 
@@ -999,13 +999,13 @@ overrides:
                   name: Authorization
                   expr: |
                     let profileHeader = get(headers, "X-Proximity-Profile");
-                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(settings, "defaultProfile") ?? settings.profiles[0].name;
-                    let profile = filter(settings.profiles, #.name == profileName)[0];
+                    let profileName = (profileHeader != nil ? profileHeader[0] : nil) ?? get(globalVars, "defaultProfile") ?? globalVars.profiles[0].name;
+                    let profile = filter(globalVars.profiles, #.name == profileName)[0];
 
                     let adGroup = get(profile, "adGroup");
                     let adGroupList = adGroup != nil ? [adGroup] : [];
 
-                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(settings, "aiGatewayEnv") ?? "staging")
+                    "slauth " + slauthtoken(adGroupList, "mlp-config", get(globalVars, "aiGatewayEnv") ?? "staging")
 
               url:
                 expr: |

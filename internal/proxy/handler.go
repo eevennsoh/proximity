@@ -397,7 +397,7 @@ func (s *server) buildTemplateInputFromRequest(req *http.Request) (map[string]an
 		"path":       req.URL.Path,
 		"pathParams": pathParamsMap,
 		"headers":    copyHeaders(req.Header),
-		"settings":   s.Vars,
+		"globalVars": s.Vars,
 		"version":    s.Version,
 	}
 
@@ -412,8 +412,8 @@ func (s *server) buildTemplateInputFromRequest(req *http.Request) (map[string]an
 
 func (s *server) buildTemplateInputFromResponse(res *http.Response, includeBody bool) (map[string]any, error) {
 	templateInput := map[string]any{
-		"headers":  copyHeaders(res.Header),
-		"settings": s.Vars,
+		"headers":    copyHeaders(res.Header),
+		"globalVars": s.Vars,
 	}
 
 	if !includeBody {

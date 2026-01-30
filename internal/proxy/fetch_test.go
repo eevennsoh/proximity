@@ -60,12 +60,12 @@ func TestExecuteFetchRequestWithExprUrl(t *testing.T) {
 	req := config.FetchRequest{
 		Method: "GET",
 		Url: config.Input{
-			Expr: `settings.baseUrl`,
+			Expr: `globalVars.baseUrl`,
 		},
 	}
 
 	templateInput := map[string]any{
-		"settings": map[string]any{
+		"globalVars": map[string]any{
 			"baseUrl": testSrv.URL,
 		},
 	}
