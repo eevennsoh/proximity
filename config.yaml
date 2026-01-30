@@ -109,7 +109,7 @@ overrides:
   global:
     request:
       headers:
-        # If no name is define for op: remove, then it removes all headers
+        # If no name is defined for op: remove, then it removes all headers
         - op: remove
 
         - op: add
