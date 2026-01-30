@@ -135,15 +135,17 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 			return
 		}
 
+		// If there's a fetch config, execute it to populate the template input
+		// Do this before the forward so that it can be used with it, the forward
+		// can then decide which endpoint based on the results of the fetch
+		if cfg.RequestResponse.Fetch != nil {
+			s.executeFetch(r.Context(), cfg.RequestResponse.Fetch, templateInput)
+		}
+
 		// Check if this is a forward route
 		if cfg.RequestResponse.Forward != nil {
 			s.handleForward(w, r, cfg.RequestResponse.Forward, templateInput)
 			return
-		}
-
-		// If there's a fetch config, execute it to populate the template input
-		if cfg.RequestResponse.Fetch != nil {
-			s.executeFetch(r.Context(), cfg.RequestResponse.Fetch, templateInput)
 		}
 
 		if cfg.Out.IsEmpty() {
