@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"bitbucket.org/atlassian-developers/proximity/internal/config"
-	"bitbucket.org/atlassian-developers/proximity/internal/settings"
 )
 
 type Options struct {
@@ -16,7 +15,9 @@ type Options struct {
 	Logger *log.Logger
 
 	*config.Config
-	Settings *settings.Struct
+
+	// Generic global variables provided to the config for rendering
+	Vars map[string]any
 }
 
 type Interface interface {

@@ -100,7 +100,7 @@ func (a *App) StartProxy() error {
 		TestMode: false,
 		Logger:   logger,
 		Config:   a.config,
-		Settings: a.settings,
+		Vars:     a.settings.Vars,
 		Version:  a.version,
 	})
 
