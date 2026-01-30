@@ -36,8 +36,7 @@ func (r *Renderer) RenderExpr(exprStr string, env map[string]any, temporaryStora
 		expr.Function("toCompactJson", r.exprToCompactJson),
 		expr.Function("getIndex", r.exprGetIndex),
 		expr.Function("regexReplaceAll", r.exprRegexReplaceAll),
-		// expr.Function("string", r.exprString),
-		// expr.Function("log", r.exprLog) <- Log something out using the Logger
+		expr.Function("log", r.exprLog),
 	}
 
 	program, err := expr.Compile(exprStr, options...)
@@ -342,4 +341,14 @@ func (r *Renderer) exprRegexReplaceAll(params ...any) (any, error) {
 	}
 
 	return result, nil
+}
+
+// exprLog logs the given arguments to the renderer's logger
+func (r *Renderer) exprLog(params ...any) (any, error) {
+	if len(params) == 0 {
+		return nil, nil
+	}
+
+	r.logger.Println(params...)
+	return nil, nil
 }
