@@ -17,19 +17,26 @@ VERSION_URL = "https://statlas.prod.atl-paas.net/vportella/proximity/version.jso
 BUILD_LD_FLAGS_COMMON = -X 'main.Version=$(VERSION)' \
 	-X 'bitbucket.org/atlassian-developers/proximity/internal/update.versionUrl=$(VERSION_URL)'
 
-BUILD_LD_FLAGS        = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG)' -X 'main.Port=29576' -X 'main.SettingsPath=$(SETTINGS_PATH)'
-BUILD_LD_FLAGS_DEV    = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG)' -X 'main.Port=29575' -X 'main.SettingsPath=$(SETTINGS_PATH_DEV)'
+BUILD_LD_FLAGS     = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG)' -X 'main.Port=29576' -X 'main.SettingsPath=$(SETTINGS_PATH)'
+BUILD_LD_FLAGS_DEV = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG)' -X 'main.Port=29575' -X 'main.SettingsPath=$(SETTINGS_PATH_DEV)'
 
-.PHONY: run build package
-.DEFAULT_GOAL := run
+.PHONY: build run vendor build-app package
+.DEFAULT_GOAL := build
+
+build:
+	GOARCH=$(ARCH) go build -ldflags "-X 'main.Version=$(VERSION)'" -o bin/$(NAME) cmd/main.go
+
+vendor:
+	go env -w GOPRIVATE="*.atlassian.com,bitbucket.org/observability,bitbucket.org/atlassian,bitbucket.org/hipchat"
+	go mod vendor
 
 run:
 	wails dev -skipbindings -ldflags "$(BUILD_LD_FLAGS_DEV)"
 
-build:
+build-app:
 	wails build -skipbindings -clean -platform darwin/$(ARCH) -ldflags "$(BUILD_LD_FLAGS)"
 
-package: build
+package: build-app
 	@mkdir -p dist
 	@set -e; \
 	app_bundle=$$(ls -d build/bin/*.app | head -n 1); \

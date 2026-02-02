@@ -30,6 +30,7 @@ func (r *Renderer) RenderExpr(exprStr string, env map[string]any, temporaryStora
 		expr.Function("has", r.exprHas),
 		expr.Function("regexFind", r.exprRegexFind),
 		expr.Function("regexReplace", r.exprRegexReplace),
+		expr.Function("slauthtokenWithCommand", r.exprSlauthTokenWithCommand),
 		expr.Function("slauthtoken", r.exprSlauthToken),
 		expr.Function("filterOutKeys", r.exprFilterOutKeys),
 		expr.Function("merge", r.exprMerge),
@@ -170,6 +171,24 @@ func (r *Renderer) exprRegexReplace(params ...any) (any, error) {
 	return r.regexReplaceFn(pattern, replacement, s)
 }
 
+func (r *Renderer) exprSlauthTokenWithCommand(params ...any) (any, error) {
+	if len(params) != 3 {
+		return nil, fmt.Errorf("slauthtoken expects 3 arguments (groups, audience, environment)")
+	}
+
+	groupsAny := params[0].([]any)
+	groups := make([]string, 0, len(groupsAny))
+
+	for _, group := range groupsAny {
+		groups = append(groups, fmt.Sprint(group))
+	}
+
+	audience := fmt.Sprint(params[1])
+	environment := fmt.Sprint(params[2])
+
+	return r.slauthTokenWithCommandFn(groups, audience, environment)
+}
+
 func (r *Renderer) exprSlauthToken(params ...any) (any, error) {
 	if len(params) != 3 {
 		return nil, fmt.Errorf("slauthtoken expects 3 arguments (groups, audience, environment)")
@@ -185,7 +204,7 @@ func (r *Renderer) exprSlauthToken(params ...any) (any, error) {
 	audience := fmt.Sprint(params[1])
 	environment := fmt.Sprint(params[2])
 
-	return r.slauthtokenFn(groups, audience, environment)
+	return r.slauthTokenFn(groups, audience, environment)
 }
 
 func (r *Renderer) exprFilterOutKeys(params ...any) (any, error) {

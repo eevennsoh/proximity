@@ -2,6 +2,8 @@ package config
 
 import (
 	"encoding/base64"
+	"fmt"
+	"os"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -132,10 +134,24 @@ func ReadConfig(configData string) (*Config, error) {
 		return nil, err
 	}
 
-	var cfg Config
-	if err := yaml.Unmarshal([]byte(decodedConfig), &cfg); err != nil {
-		return nil, err
+	return LoadFromBytes(decodedConfig)
+}
+
+func Load(path string) (*Config, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
 	}
 
-	return &cfg, nil
+	return LoadFromBytes(data)
+}
+
+func LoadFromBytes(data []byte) (*Config, error) {
+	var config Config
+
+	if err := yaml.Unmarshal(data, &config); err != nil {
+		return nil, fmt.Errorf("failed to parse config: %w", err)
+	}
+
+	return &config, nil
 }

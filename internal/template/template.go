@@ -12,6 +12,9 @@ import (
 	"text/template"
 	"time"
 
+	"bitbucket.org/atlassian/atlas-cli-kit/api/runtime"
+	"bitbucket.org/atlassian/atlas-cli-kit/api/runtime/client/slauth"
+	"bitbucket.org/atlassian/atlas-cli-kit/models"
 	jwt "github.com/golang-jwt/jwt/v5"
 )
 
@@ -66,53 +69,21 @@ func (r *Renderer) RenderTemplate(templateStr string, input map[string]any, stor
 
 func (r *Renderer) FunctionsWithStorage(temporaryStorage map[string]string) template.FuncMap {
 	return template.FuncMap{
-		"toJson":             r.toJsonFn,
-		"getType":            r.getTypeFn,
-		"safeEncode":         r.safeEncodeFn,
-		"trim":               r.trimFn,
-		"timestamp":          r.timestampFn,
-		"formattedTimestamp": r.formattedTimestampFn,
-		"set":                r.setFn(temporaryStorage),
-		"get":                r.getFn(temporaryStorage),
-		"sum":                r.sumFn,
-		"subtract":           r.subtractFn,
-		"regexFind":          r.regexFindFn,
-		"regexReplace":       r.regexReplaceFn,
-		"slauthtoken":        r.slauthtokenFn,
+		"toJson":                 r.toJsonFn,
+		"getType":                r.getTypeFn,
+		"safeEncode":             r.safeEncodeFn,
+		"trim":                   r.trimFn,
+		"timestamp":              r.timestampFn,
+		"formattedTimestamp":     r.formattedTimestampFn,
+		"set":                    r.setFn(temporaryStorage),
+		"get":                    r.getFn(temporaryStorage),
+		"sum":                    r.sumFn,
+		"subtract":               r.subtractFn,
+		"regexFind":              r.regexFindFn,
+		"regexReplace":           r.regexReplaceFn,
+		"slauthtokenWithCommand": r.slauthTokenWithCommandFn,
+		"slauthtoken":            r.slauthTokenFn,
 	}
-}
-
-func (r *Renderer) requestSlauthToken(groups []string, audience string, environment string) (string, error) {
-	// Build arguments for: atlas slauth token -g <groups> --aud <audience> -e <environment>
-	args := []string{"slauth", "token"}
-
-	if len(groups) > 0 {
-		args = append(args, "-g", strings.Join(groups, " "))
-	}
-
-	if audience != "" {
-		args = append(args, "--aud", audience)
-	}
-
-	if environment != "" {
-		args = append(args, "-e", environment)
-	}
-
-	cmd := exec.Command("/opt/atlassian/bin/atlas", args...)
-
-	// Capture stdout (token) and return it trimmed
-	out, err := cmd.Output()
-
-	if err != nil {
-		// Include stderr if available for easier troubleshooting
-		if ee, ok := err.(*exec.ExitError); ok {
-			return "", fmt.Errorf("atlas slauth token failed: %v: %s", err, strings.TrimSpace(string(ee.Stderr)))
-		}
-
-		return "", err
-	}
-
-	return strings.TrimSpace(string(out)), nil
 }
 
 func (r *Renderer) tokenHasExpired(token string) bool {
@@ -232,7 +203,15 @@ func (r *Renderer) regexReplaceFn(pattern, replacement, s string) (string, error
 	return re.ReplaceAllString(s, replacement), nil
 }
 
-func (r *Renderer) slauthtokenFn(groups []string, audience string, environment string) (string, error) {
+func (r *Renderer) slauthTokenWithCommandFn(groups []string, audience string, environment string) (string, error) {
+	return r.getSlauthToken(groups, audience, environment, r.requestSlauthTokenWithCommand)
+}
+
+func (r *Renderer) slauthTokenFn(groups []string, audience string, environment string) (string, error) {
+	return r.getSlauthToken(groups, audience, environment, r.requestSlauthToken)
+}
+
+func (r *Renderer) getSlauthToken(groups []string, audience string, environment string, slauthTokenFn func(groups []string, audience string, environment string) (string, error)) (string, error) {
 	// Build a cache key that includes all parameters
 	cacheKey := fmt.Sprintf("token:%s:%s:%s", strings.Join(groups, ","), audience, environment)
 
@@ -261,11 +240,71 @@ func (r *Renderer) slauthtokenFn(groups []string, audience string, environment s
 
 	r.logger.Printf("requesting slauth token for %s", cacheKey)
 
-	token, err := r.requestSlauthToken(groups, audience, environment)
+	token, err := slauthTokenFn(groups, audience, environment)
 	if err != nil {
 		return "", err
 	}
 
 	r.permanentStorage[cacheKey] = token
 	return token, nil
+}
+
+// For use when not running as an atlas-cli plugin
+func (r *Renderer) requestSlauthTokenWithCommand(groups []string, audience string, environment string) (string, error) {
+	// Build arguments for: atlas slauth token -g <groups> --aud <audience> -e <environment>
+	args := []string{"slauth", "token"}
+
+	if len(groups) > 0 {
+		args = append(args, "-g", strings.Join(groups, " "))
+	}
+
+	if audience != "" {
+		args = append(args, "--aud", audience)
+	}
+
+	if environment != "" {
+		args = append(args, "-e", environment)
+	}
+
+	cmd := exec.Command("/opt/atlassian/bin/atlas", args...)
+
+	// Capture stdout (token) and return it trimmed
+	out, err := cmd.Output()
+
+	if err != nil {
+		// Include stderr if available for easier troubleshooting
+		if ee, ok := err.(*exec.ExitError); ok {
+			return "", fmt.Errorf("atlas slauth token failed: %v: %s", err, strings.TrimSpace(string(ee.Stderr)))
+		}
+
+		return "", err
+	}
+
+	return strings.TrimSpace(string(out)), nil
+}
+
+// For use when running as an atlas-cli plugin
+func (r *Renderer) requestSlauthToken(groups []string, audience string, environment string) (string, error) {
+	client, err := runtime.NewAtlasClient()
+	if err != nil {
+		return "", err
+	}
+
+	auth := &runtime.AtlasClientAuth{}
+
+	tokenRequest := &models.SlauthTokenRequest{
+		Groups:    groups,
+		Audiences: []string{audience},
+		Env:       environment,
+		MFA:       false,
+	}
+
+	params := slauth.NewSlauthTokenResponseParams().WithRequest(tokenRequest)
+
+	response, err := client.Slauth.SlauthTokenResponse(params, auth)
+	if err != nil {
+		return "", fmt.Errorf("failed to get slauth token: %w", err)
+	}
+
+	return response.Payload.SlauthToken, nil
 }

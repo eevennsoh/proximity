@@ -355,6 +355,12 @@ func (s *server) overrideRequestBody(req *http.Request, templateInput map[string
 }
 
 func (s *server) overrideResponseBody(res *http.Response, templateInput map[string]any, bodyOverride config.Body) error {
+	// Handle static text body first
+	if bodyOverride.Text != "" {
+		s.applyNewBodyToResponse(res, []byte(bodyOverride.Text))
+		return nil
+	}
+
 	// Use unified render to support both Template and Expr
 	renderedBodyBytes, err := s.renderer.Render(bodyOverride.Template, bodyOverride.Expr, templateInput, nil)
 	if err != nil {
