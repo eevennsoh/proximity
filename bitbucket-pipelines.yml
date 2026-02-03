@@ -10,9 +10,6 @@ definitions:
           # Setup Artifactory Go Proxy for private dependencies
           - pipe: atlassian/artifactory-sidekick:v1
           - source .artifactory/activate.sh +goproxy
-          # Setup Go environment
-          - export GOPATH=${BITBUCKET_CLONE_DIR}
-          - mkdir -p ${GOPATH}/{bin,internal}
           - export PATH=${GOPATH}/bin:${PATH}
           # Run tests
           - make test
