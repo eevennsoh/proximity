@@ -102,8 +102,9 @@ GOEXE       ?= $(shell GOOS=$(GOOS) go env GOEXE)
 
 VERSION    ?= $(shell git describe --tags 2>/dev/null || echo "dev")
 BUILD_DATE = $(shell date +%Y%m%d.%H%M)
-PACKAGE    = $(shell go list)
-NAME       = $(notdir $(PACKAGE))
+# Hardcoded to avoid `go list` which parses all .go files and validates embed directives
+PACKAGE    = bitbucket.org/atlassian-developers/proximity
+NAME       = proximity
 EXEC       = proximity$(GOEXE)
 BUNDLE     = $(NAME)-$(VERSION)-$(GOOS)-$(GOARCH).tar.gz
 BUNDLE_SHA = $(BUNDLE).sha256
