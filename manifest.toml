@@ -1,0 +1,7 @@
+
+name = "proximity"
+summary = "A general purpose configurable HTTP proxy."
+description = "Proximity is a configurable HTTP proxy that can transform requests and responses based on a YAML configuration file."
+owners = ["vportella"]
+tags = ["ai", "proxy", "ai-gateway"]
+slackChannel = "#proximity"

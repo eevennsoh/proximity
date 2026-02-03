@@ -1,0 +1,91 @@
+image: golang:1.25
+
+definitions:
+  steps:
+    - step: &test
+        name: Test
+        size: 2x
+        script:
+          - set -eux -o pipefail
+          # Setup Artifactory Go Proxy for private dependencies
+          - pipe: atlassian/artifactory-sidekick:v1
+          - source .artifactory/activate.sh +goproxy
+          # Setup Go environment
+          - export GOPATH=${BITBUCKET_CLONE_DIR}
+          - mkdir -p ${GOPATH}/{bin,internal}
+          - export PATH=${GOPATH}/bin:${PATH}
+          # Run tests
+          - make test
+          # Build to verify compilation
+          - make build
+
+    - step: &build
+        name: Build
+        size: 2x
+        script:
+          - set -eux -o pipefail
+          # Setup Artifactory Go Proxy for private dependencies
+          - pipe: atlassian/artifactory-sidekick:v1
+          - source .artifactory/activate.sh +goproxy
+          # Setup Go environment
+          - export GOPATH=${BITBUCKET_CLONE_DIR}
+          - mkdir -p ${GOPATH}/{bin,pkg,src}
+          - export PATH=${GOPATH}/bin:${PATH}
+          - export GO111MODULE=on
+          - export GOFLAGS="-mod=readonly"
+          # Build to verify compilation
+          - make build
+          # Set version from build number and git hash
+          - export VERSION="${BITBUCKET_BUILD_NUMBER}-$(git describe --always --dirty)"
+          - echo "version=${VERSION}" > bin/bitbucket-injected-variables
+          - echo "${VERSION}" > version.txt
+          # Download and setup Atlas CLI
+          - curl -sL https://statlas.prod.atl-paas.net/atlas-cli/linux/atlas-latest-linux-amd64.tar.gz | tar xzv
+          - ./atlas plugin update && ./atlas plugin install -n atlasdev
+          # Build Atlas plugin with release version
+          - ./atlas atlasdev plugin build --release ${VERSION}
+          # Build bundles for darwin-amd64 and darwin-arm64 (defined in .atlas-plugin)
+          - make bundle-all
+        artifacts:
+          - '*.tar.gz'
+          - '*.tar.gz.sha256'
+          - 'version.txt'
+
+pipelines:
+  # Default pipeline for feature branches and PRs
+  default:
+    - parallel:
+        - step: *test
+        - step: *build
+
+  # Main branch pipeline with deployment
+  branches:
+    main:
+      - parallel:
+          - step: *test
+          - step: *build
+      - step:
+          name: Publish
+          size: 2x
+          script:
+            - set -eux -o pipefail
+            # Setup Artifactory Go Proxy for private dependencies
+            - pipe: atlassian/artifactory-sidekick:v1
+            - source .artifactory/activate.sh +goproxy
+            # Setup Go environment
+            - export GOPATH=${BITBUCKET_CLONE_DIR}
+            - mkdir -p ${GOPATH}/{bin,pkg,src}
+            - export PATH=${GOPATH}/bin:${PATH}
+            - export GO111MODULE=on
+            - export GOFLAGS="-mod=readonly"
+            # Set version from build artifacts
+            - export VERSION="${BITBUCKET_BUILD_NUMBER}-$(git describe --always --dirty)"
+            # Download and setup Atlas CLI
+            - curl -sL https://statlas.prod.atl-paas.net/atlas-cli/linux/atlas-latest-linux-amd64.tar.gz | tar xzv
+            - ./atlas plugin update && ./atlas plugin install -n atlasdev
+            # Build Atlas plugin with release version
+            - ./atlas atlasdev plugin build --release ${VERSION}
+            # Publish stable version
+            - ./atlas atlasdev plugin release
+            # Publish beta version
+            - ./atlas atlasdev plugin release -c beta
