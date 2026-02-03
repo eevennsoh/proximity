@@ -147,7 +147,7 @@ $(BIN_DIR):
 	mkdir -p $@
 
 $(BIN_DIR)/$(EXEC): $(BIN_DIR)
-	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags "-X main.Version=$(VERSION)" -o $@ $(PACKAGE)/cmd/main.go
+	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags "-X 'main.Version=$(VERSION)'" -o $@ ./cmd/main.go
 
 .PHONY: build
 build: $(BIN_DIR)/$(EXEC)
