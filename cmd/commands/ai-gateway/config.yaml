@@ -221,19 +221,40 @@ overrides:
 
           body:
             expr: |
-              toCompactJson(merge(filterOutKeys(body, ["model", "stream", "messages"]), {
-                anthropic_version: "bedrock-2023-05-31",
-                messages: map(body.messages, 
-                  type(#.content) == "string" 
-                    ? {
-                        role: #.role,
-                        content: [{
-                          type: "text",
-                          text: safeEncode(#.content)
-                        }]
-                      }
-                    : #
+              let bodyMessages = get(body, "messages");
+              let bodyTools = get(body, "tools");
+
+              let filteredTools = bodyTools != nil
+                ? map(bodyTools, filterOutKeys(#, ["custom", "defer_loading", "cache_control"]))
+                : nil;
+              let toolsObj = filteredTools != nil ? { "tools": filteredTools } : {};
+
+              let allowedTypes = ["text", "image", "document", "search_result"];
+
+              let processedMessages = bodyMessages != nil ? map(bodyMessages, true ? (
+                let msg = #;
+                let msgContent = get(msg, "content");
+                msgContent == nil ? msg : (
+                  type(msgContent) == "string"
+                    ? merge(filterOutKeys(msg, ["content"]), { "content": [{ "type": "text", "text": safeEncode(msgContent) }] })
+                    : merge(filterOutKeys(msg, ["content"]), {
+                        "content": filter(map(msgContent, true ? (
+                          let block = #;
+                          let blockType = get(block, "type");
+                          let blockContent = get(block, "content");
+                          blockType == "tool_result" && blockContent != nil && type(blockContent) != "string"
+                            ? merge(filterOutKeys(block, ["content"]), {
+                                "content": filter(blockContent, get(#, "type") in allowedTypes)
+                              })
+                            : block
+                        ) : nil), # != nil && (get(#, "type") in allowedTypes || get(#, "type") == "tool_use" || get(#, "type") == "tool_result"))
+                      })
                 )
+              ) : {}) : [];
+
+              toCompactJson(merge(filterOutKeys(body, ["model", "stream", "messages", "tools"]), toolsObj, {
+                "anthropic_version": "bedrock-2023-05-31",
+                "messages": processedMessages
               }))
 
         response:
@@ -281,19 +302,40 @@ overrides:
 
           body:
             expr: |
-              toCompactJson(merge(filterOutKeys(body, ["model", "stream", "messages"]), {
-                anthropic_version: "vertex-2023-10-16",
-                messages: map(body.messages, 
-                  type(#.content) == "string" 
-                    ? {
-                        role: #.role,
-                        content: [{
-                          type: "text",
-                          text: safeEncode(#.content)
-                        }]
-                      }
-                    : #
+              let bodyMessages = get(body, "messages");
+              let bodyTools = get(body, "tools");
+
+              let filteredTools = bodyTools != nil
+                ? map(bodyTools, filterOutKeys(#, ["custom", "defer_loading", "cache_control"]))
+                : nil;
+              let toolsObj = filteredTools != nil ? { "tools": filteredTools } : {};
+
+              let allowedTypes = ["text", "image", "document", "search_result"];
+
+              let processedMessages = bodyMessages != nil ? map(bodyMessages, true ? (
+                let msg = #;
+                let msgContent = get(msg, "content");
+                msgContent == nil ? msg : (
+                  type(msgContent) == "string"
+                    ? merge(filterOutKeys(msg, ["content"]), { "content": [{ "type": "text", "text": safeEncode(msgContent) }] })
+                    : merge(filterOutKeys(msg, ["content"]), {
+                        "content": filter(map(msgContent, true ? (
+                          let block = #;
+                          let blockType = get(block, "type");
+                          let blockContent = get(block, "content");
+                          blockType == "tool_result" && blockContent != nil && type(blockContent) != "string"
+                            ? merge(filterOutKeys(block, ["content"]), {
+                                "content": filter(blockContent, get(#, "type") in allowedTypes)
+                              })
+                            : block
+                        ) : nil), # != nil && (get(#, "type") in allowedTypes || get(#, "type") == "tool_use" || get(#, "type") == "tool_result"))
+                      })
                 )
+              ) : {}) : [];
+
+              toCompactJson(merge(filterOutKeys(body, ["model", "stream", "messages", "tools"]), toolsObj, {
+                "anthropic_version": "vertex-2023-10-16",
+                "messages": processedMessages
               }))
 
         response:
