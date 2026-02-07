@@ -1,9 +1,7 @@
-
 baseEndpoint: |
   "https://ai-gateway.us-east-1." + get(globalVars, "aiGatewayEnv") ?? "staging" + ".atl-paas.net"
 
 uriGroups:
-
   - name: Profile Router
     supportedUris:
       - in: /p/{profile}/*
@@ -137,7 +135,6 @@ overrides:
       POST: *forwarding_config
       OPTIONS: *forwarding_config
 
-
     /openai/v1/chat/completions:
       POST:
         request:
@@ -163,7 +160,6 @@ overrides:
                 toCompactJson(body)
               )
 
-
     /openai/v1/responses:
       POST:
         response:
@@ -181,7 +177,6 @@ overrides:
               ) : (
                 toCompactJson(body)
               )
-
 
     # Use the Bedrock provider. All models can be accessed through the proxy
     # using the anthropic claude format.
@@ -204,7 +199,6 @@ overrides:
             - op: add
               name: Access-Control-Max-Age
               text: "86400"
-
 
       POST:
         request:
@@ -280,7 +274,6 @@ overrides:
               ) : (
                 toCompactJson(body)
               )
-
 
     # Use the Bedrock provider. All models can be accessed through the proxy
     # using the anthropic claude format.
@@ -361,7 +354,6 @@ overrides:
               ) : (
                 toCompactJson(body)
               )
-
 
     /provider/bedrock/format/openai/v1/chat/completions:
       OPTIONS: *claude_options_response
