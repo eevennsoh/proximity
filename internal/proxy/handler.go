@@ -68,7 +68,8 @@ func (s *server) processSseLines(res *http.Response, cfg *endpointProxyConfig) e
 
 		for {
 			line, err := reader.ReadString('\n')
-			if err != nil {
+
+			if err != nil && err != io.EOF {
 				s.Logger.Println(err)
 				break
 			}
