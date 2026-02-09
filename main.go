@@ -30,6 +30,7 @@ var (
 	Config       string
 	SettingsPath string
 	Version      string
+	HelpUrl      string
 )
 
 func main() {
@@ -44,6 +45,7 @@ func main() {
 		SettingsPath,
 		Version,
 		changelog,
+		HelpUrl,
 	)
 
 	// Create application menu

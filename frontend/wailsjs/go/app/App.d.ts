@@ -6,6 +6,8 @@ export function ClearLogs():Promise<void>;
 
 export function GetEndpoints():Promise<app.EndpointsResponse>;
 
+export function OpenHelpUrl():Promise<void>;
+
 export function GetLogs():Promise<string>;
 
 export function IsRunning():Promise<boolean>;

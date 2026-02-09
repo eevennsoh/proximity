@@ -37,16 +37,18 @@ type App struct {
 
 	version   string
 	changelog string
+	helpUrl   string
 }
 
 // NewApp creates a new App application struct
-func NewApp(configPath string, port int, settingsPath, version, changelog string) *App {
+func NewApp(configPath string, port int, settingsPath, version, changelog, helpUrl string) *App {
 	return &App{
 		configPath:   configPath,
 		port:         port,
 		settingsPath: settingsPath,
 		version:      version,
 		changelog:    changelog,
+		helpUrl:      helpUrl,
 	}
 }
 
@@ -193,6 +195,13 @@ func (a *App) GetChangelog() map[string]string {
 	return map[string]string{
 		"version":   a.version,
 		"changelog": a.changelog,
+	}
+}
+
+// OpenHelpUrl opens the help URL in the user's default browser
+func (a *App) OpenHelpUrl() {
+	if a.helpUrl != "" {
+		wruntime.BrowserOpenURL(a.ctx, a.helpUrl)
 	}
 }
 

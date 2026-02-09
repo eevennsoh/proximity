@@ -10,6 +10,10 @@ export function GetEndpoints() {
   return window['go']['app']['App']['GetEndpoints']();
 }
 
+export function OpenHelpUrl() {
+  return window['go']['app']['App']['OpenHelpUrl']();
+}
+
 export function GetLogs() {
   return window['go']['app']['App']['GetLogs']();
 }

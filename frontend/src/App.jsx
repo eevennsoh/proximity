@@ -232,8 +232,22 @@ export default function App() {
         <div className="relative w-full flex items-center justify-between app-no-drag">
           <div
             style={{ "--wails-draggable": "no-drag" }}
-            className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2"
+            className="absolute left-1/2 -translate-x-1/2 flex items-center gap-3"
           >
+            <div className="relative group">
+              <button
+                onClick={() => API?.OpenHelpUrl()}
+                className="w-7 h-7 rounded-full bg-[#0a84ff] hover:bg-[#409cff] active:bg-[#2b7de0] grid place-items-center transition-colors duration-75 border border-white/20 shadow-lg shadow-black/20"
+              >
+                <span className="text-white text-sm font-bold leading-none">?</span>
+              </button>
+              <div className="absolute top-full left-1/2 -translate-x-1/2 mt-3 opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity duration-75">
+                <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 rotate-45 bg-[hsl(240,5%,10%)]" />
+                <div className="relative px-2.5 py-1.5 rounded-md bg-[hsl(240,5%,10%)] text-white text-xs font-medium whitespace-nowrap shadow-lg shadow-black/30 text-center leading-relaxed">
+                  Reach out in #proximity<br />to ask any questions
+                </div>
+              </div>
+            </div>
             <div className="relative inline-flex rounded-lg bg-black/10 dark:bg-black/20 p-0.5 overflow-hidden shadow-inner shadow-black/10">
               <span
                 className={`pointer-events-none absolute top-0.5 left-0.5 bottom-0.5 w-24 rounded-md bg-[#1bc15b] dark:bg-[#1bc15b]/80 backdrop-blur-sm ring-1 ring-black/5 transform-gpu transition-transform duration-150 ease-in-out shadow-md shadow-black/20 border border-white/20 ${

@@ -14,8 +14,12 @@ SETTINGS_PATH_DEV = /.config/proximity/settings-dev
 
 VERSION_URL = "https://statlas.prod.atl-paas.net/vportella/proximity/version.json"
 
+# #proximity slack channel
+HELP_URL ?= "https://atlassian.slack.com/archives/C0A76FH6PSN"
+
 BUILD_LD_FLAGS_COMMON = -X 'main.Version=$(VERSION)' \
-	-X 'bitbucket.org/atlassian-developers/proximity/internal/update.versionUrl=$(VERSION_URL)'
+	-X 'bitbucket.org/atlassian-developers/proximity/internal/update.versionUrl=$(VERSION_URL)' \
+	-X 'main.HelpUrl=$(HELP_URL)'
 
 BUILD_LD_FLAGS     = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG)' -X 'main.Port=29576' -X 'main.SettingsPath=$(SETTINGS_PATH)'
 BUILD_LD_FLAGS_DEV = $(BUILD_LD_FLAGS_COMMON) -X 'main.Config=$(CONFIG)' -X 'main.Port=29575' -X 'main.SettingsPath=$(SETTINGS_PATH_DEV)'
