@@ -123,7 +123,10 @@ func (s *server) executeFetchRequest(parentCtx context.Context, req config.Fetch
 	}
 
 	// Execute request
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: timeout,
+	}
+
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
 		return &RequestResult{Error: fmt.Sprintf("request failed: %v", err)}

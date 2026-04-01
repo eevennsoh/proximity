@@ -10,6 +10,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"strings"
+	"time"
 
 	"bitbucket.org/atlassian-developers/proximity/internal/config"
 
@@ -68,9 +69,11 @@ func (s *server) processSseLines(res *http.Response, cfg *endpointProxyConfig) e
 
 		for {
 			line, err := reader.ReadString('\n')
+			if err != nil {
+				if err != io.EOF {
+					s.Logger.Println(err)
+				}
 
-			if err != nil && err != io.EOF {
-				s.Logger.Println(err)
 				break
 			}
 
@@ -288,7 +291,9 @@ func (s *server) makeRequest(request config.Request) ([]byte, error) {
 
 	req.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
+	client := &http.Client{
+		Timeout: 30 * time.Second,
+	}
 
 	resp, err := client.Do(req)
 	if err != nil {

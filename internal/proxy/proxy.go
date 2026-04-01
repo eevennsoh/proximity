@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"time"
 
 	"bitbucket.org/atlassian-developers/proximity/internal/config"
 	"bitbucket.org/atlassian-developers/proximity/internal/template"
@@ -25,8 +26,12 @@ func New(options Options) Interface {
 	router := chi.NewRouter()
 
 	httpServer := &http.Server{
-		Addr:    fmt.Sprint(":", options.Port),
-		Handler: router,
+		Addr:              fmt.Sprint(":", options.Port),
+		Handler:           router,
+		ReadHeaderTimeout: 30 * time.Second,
+		ReadTimeout:       5 * time.Minute,
+		WriteTimeout:      10 * time.Minute,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	return &server{
@@ -58,6 +63,18 @@ func (s *server) RunServer(ctx context.Context) {
 			s.router.Method(method, uri, s.handleEndpoint(cfg))
 		}
 	}
+
+	// Shut down the HTTP server when the context is cancelled.
+	// Without this, ListenAndServe blocks indefinitely and the server
+	// never responds to context cancellation, which can cause the Go
+	// runtime network poller to spin under degraded network conditions.
+	go func() {
+		<-ctx.Done()
+		s.Logger.Println("context cancelled, shutting down http server")
+		if err := s.httpServer.Close(); err != nil {
+			s.Logger.Printf("error closing http server: %v", err)
+		}
+	}()
 
 	if err := s.httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		s.Logger.Fatal(err)
