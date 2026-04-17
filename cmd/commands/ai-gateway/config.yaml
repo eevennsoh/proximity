@@ -4,6 +4,13 @@ baseEndpoint: |
 
 uriGroups:
 
+  - name: Health Check
+    supportedUris:
+      - in: /health
+        description: Health check endpoint
+        out:
+          - method: GET
+
   - name: Profile Router
     supportedUris:
       - in: /p/{profile}/*
@@ -124,6 +131,14 @@ overrides:
           text: application/json
 
   uris:
+    /health:
+      GET:
+        response:
+          statusCode:
+            int: 200
+          body:
+            text: '{"status":"ok"}'
+
     /p/{profile}/*:
       GET: &forwarding_config
         forward:
