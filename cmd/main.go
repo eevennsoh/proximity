@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	aigateway "bitbucket.org/atlassian-developers/proximity/cmd/commands/ai-gateway"
@@ -11,7 +12,11 @@ import (
 	"github.com/urfave/cli/v2"
 )
 
-var Version string
+var (
+	Version string
+
+	logFile *os.File
+)
 
 func main() {
 	app := &cli.App{
@@ -32,6 +37,33 @@ based on a YAML configuration file.`,
 				Value:   29574,
 				Usage:   "Port to run the server on",
 			},
+			&cli.StringFlag{
+				Name:    "log-file",
+				Aliases: []string{"l"},
+				Usage:   "Write logs to a file instead of stderr",
+				EnvVars: []string{"PROXIMITY_LOG_FILE"},
+			},
+		},
+		Before: func(c *cli.Context) error {
+			path := c.String("log-file")
+			if path == "" {
+				return nil
+			}
+
+			f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+			if err != nil {
+				return fmt.Errorf("failed to open log file %q: %w", path, err)
+			}
+
+			logFile = f
+			log.SetOutput(f)
+			return nil
+		},
+		After: func(c *cli.Context) error {
+			if logFile != nil {
+				return logFile.Close()
+			}
+			return nil
 		},
 		Action: runWithConfig,
 		Commands: []*cli.Command{
