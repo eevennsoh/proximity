@@ -118,8 +118,12 @@ overrides:
 
             let adGroup = get(profile, "adGroup");
             let adGroupList = adGroup != nil ? [adGroup] : [];
+            let aiGatewayEnv = get(globalVars, "aiGatewayEnv") ?? "staging";
+            let useSlauthCommand = get(globalVars, "useSlauthCommand");
 
-            "slauth " + slauthtoken(adGroupList, "ai-gateway", get(globalVars, "aiGatewayEnv") ?? "staging")
+            "slauth " + (useSlauthCommand
+              ? slauthtokenWithCommand(adGroupList, "ai-gateway", aiGatewayEnv)
+              : slauthtoken(adGroupList, "ai-gateway", aiGatewayEnv))
 
     response:
       headers:

@@ -42,6 +42,10 @@ through AI-Gateway.`,
 				Name:  "default-profile",
 				Usage: "Name of the profile to use by default (if not defined then uses the first profile)",
 			},
+			&cli.BoolFlag{
+				Name:  "use-slauth-command",
+				Usage: "Get Slauth tokens by executing atlas slauth token instead of using atlas-cli plugin auth",
+			},
 		},
 		Action: run,
 	}
@@ -76,6 +80,7 @@ func run(c *cli.Context) error {
 	port := c.Int("port")
 	env := c.String("env")
 	defaultProfile := c.String("default-profile")
+	useSlauthCommand := c.Bool("use-slauth-command")
 
 	profileStrings := c.StringSlice("profile")
 
@@ -109,5 +114,6 @@ func run(c *cli.Context) error {
 		vars["defaultProfile"] = c.String("default-profile")
 	}
 
+	vars["useSlauthCommand"] = useSlauthCommand
 	return server.RunServer(cfg, port, vars)
 }
