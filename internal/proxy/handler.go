@@ -167,6 +167,12 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 			return
 		}
 
+		if err := s.prepareReplayableRequest(r); err != nil {
+			s.Logger.Println(err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
 		proxyHandler := s.endpointProxy(cfg)
 		proxyHandler.ServeHTTP(w, r)
 	}
@@ -207,6 +213,7 @@ func (s *server) handleForward(w http.ResponseWriter, r *http.Request, fwd *conf
 func (s *server) endpointProxy(cfg *endpointProxyConfig) *httputil.ReverseProxy {
 	proxy := httputil.NewSingleHostReverseProxy(cfg.baseEndpoint)
 	proxy.ModifyResponse = s.modifyResponse(cfg)
+	proxy.Transport = s.retryTransport()
 
 	return proxy
 }

@@ -134,6 +134,27 @@ func copyBody(body *io.ReadCloser) ([]byte, error) {
 	return bodyBytes, nil
 }
 
+func (s *server) prepareReplayableRequest(req *http.Request) error {
+	if req.Body == nil || req.Body == http.NoBody {
+		req.GetBody = func() (io.ReadCloser, error) {
+			return http.NoBody, nil
+		}
+		return nil
+	}
+
+	bodyBytes, err := io.ReadAll(req.Body)
+	if err != nil {
+		return err
+	}
+
+	if err := req.Body.Close(); err != nil {
+		return err
+	}
+
+	s.applyNewBodyToRequest(req, bodyBytes)
+	return nil
+}
+
 // overrides all the headers and renders the header values at the end to make sure than render functions aren't called
 // for routes than they aren't included in. E.g. for headless requests if not done in two steps, the slauth token would
 // be requested even though the header gets removed after.

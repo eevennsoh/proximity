@@ -19,7 +19,8 @@ type server struct {
 	router     *chi.Mux
 	httpServer *http.Server
 
-	renderer *template.Renderer
+	renderer    *template.Renderer
+	rateLimiter *rateLimitCoordinator
 }
 
 func New(options Options) Interface {
@@ -35,10 +36,11 @@ func New(options Options) Interface {
 	}
 
 	return &server{
-		Options:    options,
-		router:     router,
-		httpServer: httpServer,
-		renderer:   template.NewRenderer(options.Logger),
+		Options:     options,
+		router:      router,
+		httpServer:  httpServer,
+		renderer:    template.NewRenderer(options.Logger),
+		rateLimiter: newRateLimitCoordinator(),
 	}
 }
 
