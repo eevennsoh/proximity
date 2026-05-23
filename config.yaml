@@ -180,7 +180,14 @@ overrides:
         request:
           body:
             expr: |
-              toCompactJson(merge(filterOutKeys(body, ["max_tokens"]),
+              toCompactJson(merge(filterOutKeys(body, ["max_tokens", "model"]), {
+                "model": regexReplaceAll(get(body, "model") ?? "", [
+                  "^gpt-5\\.5$", "gpt-5.5-2026-04-23",
+                  "^gpt-5\\.4$", "gpt-5.4-2026-03-05",
+                  "^gpt-5\\.4-mini$", "gpt-5.4-mini-2026-03-17",
+                  "^gpt-5\\.4-nano$", "gpt-5.4-nano-2026-03-17"
+                ])
+              },
                 get(body, "max_tokens") != nil ? { "max_completion_tokens": get(body, "max_tokens") } : {}
               ))
 
@@ -203,6 +210,18 @@ overrides:
 
     /openai/v1/responses:
       POST:
+        request:
+          body:
+            expr: |
+              toCompactJson(merge(filterOutKeys(body, ["model"]), {
+                "model": regexReplaceAll(get(body, "model") ?? "", [
+                  "^gpt-5\\.5$", "gpt-5.5-2026-04-23",
+                  "^gpt-5\\.4$", "gpt-5.4-2026-03-05",
+                  "^gpt-5\\.4-mini$", "gpt-5.4-mini-2026-03-17",
+                  "^gpt-5\\.4-nano$", "gpt-5.4-nano-2026-03-17"
+                ])
+              }))
+
         response:
           headers:
             - op: add
