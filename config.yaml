@@ -369,7 +369,7 @@ overrides:
 
           body:
             expr: |
-              toCompactJson(merge(filterOutKeys(body, ["model", "stream", "messages"]), {
+              toCompactJson(merge(filterOutKeys(body, ["model", "stream", "messages", "context_management"]), {
                 anthropic_version: "bedrock-2023-05-31",
                 messages: map(body.messages, 
                   type(#.content) == "string" 
@@ -526,7 +526,7 @@ overrides:
 
           body:
             expr: |
-              toCompactJson(merge(filterOutKeys(body, ["model", "stream", "messages"]), {
+              toCompactJson(merge(filterOutKeys(body, ["model", "stream", "messages", "context_management"]), {
                 anthropic_version: "vertex-2023-10-16",
                 messages: map(body.messages, 
                   type(#.content) == "string" 
