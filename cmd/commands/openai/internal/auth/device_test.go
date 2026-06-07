@@ -72,13 +72,43 @@ func TestLoginWithDevicePollsAndStoresCredentials(t *testing.T) {
 
 	credentials, err := store.Load()
 	require.NoError(t, err)
-	assert.Equal(t, Credentials{
-		Type:      credentialTypeOauth,
-		Refresh:   "device-refresh-token",
-		Access:    "device-access-token",
-		Expires:   fixedNow.Add(time.Hour).UnixMilli(),
-		AccountId: "account-from-device",
-	}, credentials)
+	assert.Equal(t, openaiCredentialsForTest("device-access-token", "device-refresh-token", fixedNow.Add(time.Hour), "account-from-device"), credentials)
+}
+
+// TestDevicePollDelayAddsOpenAIPollMargin verifies OpenAI-specific polling delay policy.
+func TestDevicePollDelayAddsOpenAIPollMargin(t *testing.T) {
+	tests := []struct {
+		name     string
+		interval string
+		want     time.Duration
+	}{
+		{
+			name:     "zero interval still waits margin",
+			interval: "0",
+			want:     devicePollMargin,
+		},
+		{
+			name:     "positive interval adds margin",
+			interval: "2",
+			want:     5 * time.Second,
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, err := devicePollDelay(testCase.interval)
+
+			require.NoError(t, err)
+			assert.Equal(t, testCase.want, got)
+		})
+	}
+}
+
+// TestDevicePollDelayRejectsInvalidInterval verifies malformed polling intervals fail.
+func TestDevicePollDelayRejectsInvalidInterval(t *testing.T) {
+	_, err := devicePollDelay("nope")
+
+	assert.ErrorContains(t, err, "invalid openai device polling interval")
 }
 
 // assertDeviceUserCodeRequest verifies the device user-code request body.

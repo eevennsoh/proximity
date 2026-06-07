@@ -9,23 +9,25 @@ import (
 )
 
 const (
-	providerName     = "openai"
-	defaultClientId  = "app_EMoamEEZ73f0CkXaXp7hrann"
-	defaultIssuer    = "https://auth.openai.com"
-	defaultOauthPort = 1455
+	providerName        = "anthropic"
+	defaultClientId     = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
+	defaultAuthorizeUrl = "https://claude.ai/oauth/authorize"
+	defaultTokenUrl     = "https://platform.claude.com/v1/oauth/token"
+	defaultOauthPort    = 53692
 )
 
 type options struct {
 	credentialPath string
 	client         httpClient
 	clientId       string
-	issuer         string
+	authorizeUrl   string
+	tokenUrl       string
 	oauthPort      int
 	now            func() time.Time
 	openBrowser    func(string) error
 }
 
-// Option configures the OpenAI auth service.
+// Option configures the Anthropic auth service.
 type Option func(*options)
 
 // WithCredentialPath overrides the default credential file path.
@@ -42,10 +44,17 @@ func WithHttpClient(client httpClient) Option {
 	}
 }
 
-// WithIssuer overrides the OAuth issuer.
-func WithIssuer(issuer string) Option {
+// WithAuthorizeUrl overrides the OAuth authorization endpoint.
+func WithAuthorizeUrl(authorizeUrl string) Option {
 	return func(options *options) {
-		options.issuer = issuer
+		options.authorizeUrl = authorizeUrl
+	}
+}
+
+// WithTokenUrl overrides the OAuth token endpoint.
+func WithTokenUrl(tokenUrl string) Option {
+	return func(options *options) {
+		options.tokenUrl = tokenUrl
 	}
 }
 
@@ -81,7 +90,8 @@ func defaultOptions() (options, error) {
 		credentialPath: path,
 		client:         http.DefaultClient,
 		clientId:       defaultClientId,
-		issuer:         defaultIssuer,
+		authorizeUrl:   defaultAuthorizeUrl,
+		tokenUrl:       defaultTokenUrl,
 		oauthPort:      defaultOauthPort,
 		now:            time.Now,
 		openBrowser: func(string) error {

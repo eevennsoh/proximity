@@ -147,7 +147,7 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 		// Build the template variable map to use the render everything
 		templateInput, err := s.buildTemplateInputFromRequest(r)
 		if err != nil {
-			s.Logger.Println(err)
+			s.writeRequestError(w, "failed to build proxy request", err)
 			return
 		}
 
@@ -175,13 +175,19 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 		}
 
 		if err := s.renderRequest(r.Context(), r, cfg, templateInput); err != nil {
-			s.Logger.Println(err)
+			s.writeRequestError(w, "failed to render proxy request", err)
 			return
 		}
 
 		proxyHandler := s.endpointProxy(cfg)
 		proxyHandler.ServeHTTP(w, r)
 	}
+}
+
+// writeRequestError logs a request processing failure and returns a non-empty error response.
+func (s *server) writeRequestError(w http.ResponseWriter, message string, err error) {
+	s.Logger.Printf("%s: %v", message, err)
+	http.Error(w, message, http.StatusInternalServerError)
 }
 
 func (s *server) handleForward(w http.ResponseWriter, r *http.Request, fwd *config.Forward, templateInput map[string]any) {

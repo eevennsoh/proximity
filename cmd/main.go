@@ -6,6 +6,7 @@ import (
 	"os"
 
 	aigateway "bitbucket.org/atlassian-developers/proximity/cmd/commands/ai-gateway"
+	anthropic "bitbucket.org/atlassian-developers/proximity/cmd/commands/anthropic"
 	openai "bitbucket.org/atlassian-developers/proximity/cmd/commands/openai"
 	"bitbucket.org/atlassian-developers/proximity/internal/config"
 	"bitbucket.org/atlassian-developers/proximity/internal/server"
@@ -69,6 +70,7 @@ based on a YAML configuration file.`,
 		Action: runWithConfig,
 		Commands: []*cli.Command{
 			aigateway.Command(),
+			anthropic.Command(),
 			openai.Command(),
 		},
 	}

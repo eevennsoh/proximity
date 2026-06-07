@@ -16,9 +16,9 @@ import (
 
 // TestAccessTokenReturnsStoredTokenWhenFresh verifies unexpired credentials are reused as-is.
 func TestAccessTokenReturnsStoredTokenWhenFresh(t *testing.T) {
-	fixedNow := time.Date(2026, time.June, 6, 12, 0, 0, 0, time.UTC)
+	fixedNow := time.Date(2026, time.June, 7, 12, 0, 0, 0, time.UTC)
 	store := newCredentialStoreForTest(t)
-	auth := newServiceForTest(store, fixedNow, defaultIssuer, nil)
+	auth := newServiceForTest(store, fixedNow, "https://auth.example", "https://token.example", nil)
 
 	err := store.Save(internaloauth.Credentials{
 		Type:    internaloauth.CredentialTypeOauth,
@@ -37,16 +37,16 @@ func TestAccessTokenReturnsStoredTokenWhenFresh(t *testing.T) {
 // TestAccessTokenMissingCredentialsReturnsLoginError verifies missing credentials guide login.
 func TestAccessTokenMissingCredentialsReturnsLoginError(t *testing.T) {
 	store := newCredentialStoreForTest(t)
-	auth := newServiceForTest(store, time.Now(), defaultIssuer, nil)
+	auth := newServiceForTest(store, time.Now(), "https://auth.example", "https://token.example", nil)
 
 	_, err := auth.AccessToken(context.Background())
 
-	assert.ErrorContains(t, err, "proximity openai login")
+	assert.ErrorContains(t, err, "proximity anthropic login")
 }
 
 // TestAccessTokenRefreshesExpiredCredentials verifies refresh requests and persisted credentials.
 func TestAccessTokenRefreshesExpiredCredentials(t *testing.T) {
-	fixedNow := time.Date(2026, time.June, 6, 12, 0, 0, 0, time.UTC)
+	fixedNow := time.Date(2026, time.June, 7, 12, 0, 0, 0, time.UTC)
 	store := newCredentialStoreForTest(t)
 
 	err := store.Save(internaloauth.Credentials{
@@ -59,20 +59,22 @@ func TestAccessTokenRefreshesExpiredCredentials(t *testing.T) {
 
 	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		require.Equal(t, oauthTokenPath, request.URL.Path)
-		require.NoError(t, request.ParseForm())
-		assert.Equal(t, "refresh_token", request.Form.Get("grant_type"))
-		assert.Equal(t, defaultClientId, request.Form.Get("client_id"))
-		assert.Equal(t, "refresh-token", request.Form.Get("refresh_token"))
+		assertAnthropicTokenRequest(t, request)
 
-		response.Header().Set("Content-Type", "application/json")
-		_, err := response.Write([]byte(`{"id_token":"` + unsignedToken(t, map[string]any{
-			chatgptAccountIdClaim: "account-from-token",
-		}) + `","access_token":"new-access-token","refresh_token":"new-refresh-token","expires_in":3600}`))
-		require.NoError(t, err)
+		body := decodeJsonBodyForTest(t, request)
+		assert.Equal(t, "refresh_token", body["grant_type"])
+		assert.Equal(t, defaultClientId, body["client_id"])
+		assert.Equal(t, "refresh-token", body["refresh_token"])
+
+		writeJsonForTest(t, response, map[string]any{
+			"access_token":  "new-access-token",
+			"refresh_token": "new-refresh-token",
+			"expires_in":    3600,
+		})
 	}))
 	t.Cleanup(server.Close)
 
-	auth := newServiceForTest(store, fixedNow, server.URL, server.Client())
+	auth := newServiceForTest(store, fixedNow, "https://auth.example", server.URL+oauthTokenPath, server.Client())
 
 	got, err := auth.AccessToken(context.Background())
 
@@ -81,13 +83,18 @@ func TestAccessTokenRefreshesExpiredCredentials(t *testing.T) {
 
 	credentials, err := store.Load()
 	require.NoError(t, err)
-	assert.Equal(t, openaiCredentialsForTest("new-access-token", "new-refresh-token", fixedNow.Add(time.Hour), "account-from-token"), credentials)
+	assert.Equal(t, internaloauth.Credentials{
+		Type:    internaloauth.CredentialTypeOauth,
+		Refresh: "new-refresh-token",
+		Access:  "new-access-token",
+		Expires: fixedNow.Add(time.Hour).UnixMilli(),
+	}, credentials)
 }
 
 // TestLogoutRemovesCredentials verifies logout deletes stored credentials.
 func TestLogoutRemovesCredentials(t *testing.T) {
 	store := newCredentialStoreForTest(t)
-	auth := newServiceForTest(store, time.Now(), defaultIssuer, nil)
+	auth := newServiceForTest(store, time.Now(), "https://auth.example", "https://token.example", nil)
 
 	err := store.Save(internaloauth.Credentials{
 		Type:    internaloauth.CredentialTypeOauth,
@@ -104,25 +111,19 @@ func TestLogoutRemovesCredentials(t *testing.T) {
 	assert.True(t, errors.Is(err, internaloauth.ErrCredentialsNotFound))
 }
 
-// TestStatusForMissingCredentials verifies status reports unauthenticated without error.
-func TestStatusForMissingCredentials(t *testing.T) {
-	store := newCredentialStoreForTest(t)
-	auth := newServiceForTest(store, time.Now(), defaultIssuer, nil)
-
-	status, err := auth.Status(context.Background())
-
-	require.NoError(t, err)
-	assert.False(t, status.Authenticated)
-}
-
 // TestStatusForStoredCredentials verifies status exposes non-sensitive credential state.
 func TestStatusForStoredCredentials(t *testing.T) {
-	fixedNow := time.Date(2026, time.June, 6, 12, 0, 0, 0, time.UTC)
+	fixedNow := time.Date(2026, time.June, 7, 12, 0, 0, 0, time.UTC)
 	store := newCredentialStoreForTest(t)
-	auth := newServiceForTest(store, fixedNow, defaultIssuer, nil)
+	auth := newServiceForTest(store, fixedNow, "https://auth.example", "https://token.example", nil)
 	expiresAt := fixedNow.Add(time.Hour)
 
-	err := store.Save(openaiCredentialsForTest("access-token", "refresh-token", expiresAt, "account-123"))
+	err := store.Save(internaloauth.Credentials{
+		Type:    internaloauth.CredentialTypeOauth,
+		Access:  "access-token",
+		Refresh: "refresh-token",
+		Expires: expiresAt.UnixMilli(),
+	})
 	require.NoError(t, err)
 
 	status, err := auth.Status(context.Background())
@@ -130,7 +131,6 @@ func TestStatusForStoredCredentials(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, status.Authenticated)
 	assert.False(t, status.Expired)
-	assert.Equal(t, "account-123", status.AccountId)
 	assert.True(t, status.ExpiresAt.Equal(expiresAt))
 }
 
@@ -142,7 +142,7 @@ func newCredentialStoreForTest(t *testing.T) internaloauth.Store {
 }
 
 // newServiceForTest returns a service with deterministic test collaborators.
-func newServiceForTest(store internaloauth.Store, now time.Time, issuer string, client httpClient) *service {
+func newServiceForTest(store internaloauth.Store, now time.Time, authorizeUrl string, tokenUrl string, client httpClient) *service {
 	if client == nil {
 		client = http.DefaultClient
 	}
@@ -150,7 +150,7 @@ func newServiceForTest(store internaloauth.Store, now time.Time, issuer string, 
 	tokens := &tokenClient{
 		client:   client,
 		clientId: defaultClientId,
-		issuer:   issuer,
+		tokenUrl: tokenUrl,
 		now: func() time.Time {
 			return now
 		},
@@ -161,11 +161,10 @@ func newServiceForTest(store internaloauth.Store, now time.Time, issuer string, 
 		oauthService: internaloauth.New(store, tokens, internaloauth.WithNow(func() time.Time {
 			return now
 		})),
-		tokens:    tokens,
-		client:    client,
-		clientId:  defaultClientId,
-		issuer:    issuer,
-		oauthPort: defaultOauthPort,
+		tokens:       tokens,
+		clientId:     defaultClientId,
+		authorizeUrl: authorizeUrl,
+		oauthPort:    defaultOauthPort,
 		now: func() time.Time {
 			return now
 		},
@@ -173,21 +172,4 @@ func newServiceForTest(store internaloauth.Store, now time.Time, issuer string, 
 			return nil
 		},
 	}
-}
-
-// openaiCredentialsForTest returns generic OAuth credentials with OpenAI account metadata.
-func openaiCredentialsForTest(access string, refresh string, expires time.Time, accountId string) internaloauth.Credentials {
-	credentials := internaloauth.Credentials{
-		Type:    internaloauth.CredentialTypeOauth,
-		Access:  access,
-		Refresh: refresh,
-		Expires: expires.UnixMilli(),
-	}
-
-	if accountId != "" {
-		credentials.Metadata = make(map[string]string)
-		credentials.Metadata[accountIdMetadataKey] = accountId
-	}
-
-	return credentials
 }

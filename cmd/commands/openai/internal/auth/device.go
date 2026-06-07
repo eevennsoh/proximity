@@ -7,9 +7,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"strconv"
 	"time"
+
+	internaloauth "bitbucket.org/atlassian-developers/proximity/internal/oauth"
 )
 
 const (
@@ -17,6 +18,7 @@ const (
 	deviceTokenPath    = "/api/accounts/deviceauth/token"
 	deviceCallbackUri  = "https://auth.openai.com/deviceauth/callback"
 	deviceVerifyUrl    = "https://auth.openai.com/codex/device"
+	devicePollTimeout  = 15 * time.Minute
 	devicePollMargin   = 3 * time.Second
 	deviceUserAgent    = "proximity"
 )
@@ -39,26 +41,20 @@ func (s *service) loginWithDevice(ctx context.Context, output io.Writer) error {
 		return err
 	}
 
-	fmt.Fprintf(output, "Open %s and enter code: %s\n", deviceVerifyUrl, userCode.UserCode)
+	if _, err := fmt.Fprintf(output, "Open %s and enter code: %s\n", deviceVerifyUrl, userCode.UserCode); err != nil {
+		return err
+	}
 
 	token, err := s.pollDeviceAuthorization(ctx, userCode)
 	if err != nil {
 		return err
 	}
 
-	form := url.Values{}
-	form.Set("grant_type", "authorization_code")
-	form.Set("code", token.AuthorizationCode)
-	form.Set("redirect_uri", deviceCallbackUri)
-	form.Set("client_id", s.clientId)
-	form.Set("code_verifier", token.CodeVerifier)
-
-	tokens, err := s.postTokenForm(ctx, form)
+	credentials, err := s.tokens.exchangeAuthorizationCode(ctx, token.AuthorizationCode, deviceCallbackUri, token.CodeVerifier)
 	if err != nil {
 		return err
 	}
 
-	credentials := s.credentialsFromTokenResponse(tokens, "")
 	if err := s.store.Save(credentials); err != nil {
 		return err
 	}
@@ -68,9 +64,8 @@ func (s *service) loginWithDevice(ctx context.Context, output io.Writer) error {
 
 // requestDeviceUserCode starts a device-code OAuth login and returns the user code.
 func (s *service) requestDeviceUserCode(ctx context.Context) (deviceUserCodeResponse, error) {
-	body := map[string]string{
-		"client_id": s.clientId,
-	}
+	body := make(map[string]string)
+	body["client_id"] = s.clientId
 
 	var userCode deviceUserCodeResponse
 
@@ -88,69 +83,74 @@ func (s *service) pollDeviceAuthorization(ctx context.Context, userCode deviceUs
 		return deviceTokenResponse{}, err
 	}
 
-	for {
-		token, pending, err := s.pollDeviceAuthorizationOnce(ctx, userCode)
+	var token deviceTokenResponse
+
+	err = internaloauth.PollDevice(ctx, internaloauth.DevicePollConfig{
+		Interval: delay,
+		Timeout:  devicePollTimeout,
+	}, func(ctx context.Context) (internaloauth.DevicePollStatus, error) {
+		polledToken, status, err := s.pollDeviceAuthorizationOnce(ctx, userCode)
 		if err != nil {
-			return deviceTokenResponse{}, err
+			return "", err
 		}
 
-		if !pending {
-			return token, nil
+		if status == internaloauth.DevicePollComplete {
+			token = polledToken
 		}
 
-		select {
-		case <-time.After(delay):
-		case <-ctx.Done():
-			return deviceTokenResponse{}, ctx.Err()
-		}
+		return status, nil
+	})
+	if err != nil {
+		return deviceTokenResponse{}, err
 	}
+
+	return token, nil
 }
 
 // pollDeviceAuthorizationOnce performs one device authorization poll.
-func (s *service) pollDeviceAuthorizationOnce(ctx context.Context, userCode deviceUserCodeResponse) (deviceTokenResponse, bool, error) {
-	body := map[string]string{
-		"device_auth_id": userCode.DeviceAuthId,
-		"user_code":      userCode.UserCode,
-	}
+func (s *service) pollDeviceAuthorizationOnce(ctx context.Context, userCode deviceUserCodeResponse) (deviceTokenResponse, internaloauth.DevicePollStatus, error) {
+	body := make(map[string]string)
+	body["device_auth_id"] = userCode.DeviceAuthId
+	body["user_code"] = userCode.UserCode
 
 	encoded, err := json.Marshal(body)
 	if err != nil {
-		return deviceTokenResponse{}, false, err
+		return deviceTokenResponse{}, "", err
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.issuer+deviceTokenPath, bytes.NewReader(encoded))
 	if err != nil {
-		return deviceTokenResponse{}, false, err
+		return deviceTokenResponse{}, "", err
 	}
 
 	setDeviceHeaders(req)
 
 	resp, err := s.client.Do(req)
 	if err != nil {
-		return deviceTokenResponse{}, false, err
+		return deviceTokenResponse{}, "", err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound {
-		return deviceTokenResponse{}, true, nil
+		return deviceTokenResponse{}, internaloauth.DevicePollPending, nil
 	}
 
 	bodyBytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return deviceTokenResponse{}, false, err
+		return deviceTokenResponse{}, "", err
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return deviceTokenResponse{}, false, fmt.Errorf("openai device token endpoint returned HTTP %d: %s", resp.StatusCode, string(bodyBytes))
+		return deviceTokenResponse{}, "", fmt.Errorf("openai device token endpoint returned HTTP %d: %s", resp.StatusCode, string(bodyBytes))
 	}
 
 	var token deviceTokenResponse
 
 	if err := json.Unmarshal(bodyBytes, &token); err != nil {
-		return deviceTokenResponse{}, false, err
+		return deviceTokenResponse{}, "", err
 	}
 
-	return token, false, nil
+	return token, internaloauth.DevicePollComplete, nil
 }
 
 // postDeviceJson posts JSON to a device auth endpoint and decodes the response.

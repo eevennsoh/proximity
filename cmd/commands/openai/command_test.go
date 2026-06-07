@@ -55,6 +55,49 @@ func TestPortFlagDefaultsToAiGatewayPort(t *testing.T) {
 	assert.Equal(t, 29574, flag.Value)
 }
 
+// TestServePortCanBeSetBeforeOrAfterServe verifies both CLI port flag positions.
+func TestServePortCanBeSetBeforeOrAfterServe(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{
+			name: "before serve",
+			args: []string{"proximity", "openai", "--port", "29573", "serve"},
+		},
+		{
+			name: "after serve",
+			args: []string{"proximity", "openai", "serve", "--port", "29573"},
+		},
+	}
+
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			var got int
+
+			cmd := Command()
+			for _, subcommand := range cmd.Subcommands {
+				if subcommand.Name == "serve" {
+					subcommand.Action = func(c *cli.Context) error {
+						got = commandPort(c)
+						return nil
+					}
+				}
+			}
+
+			app := cli.NewApp()
+			app.Writer = io.Discard
+			app.ErrWriter = io.Discard
+			app.Commands = []*cli.Command{cmd}
+
+			err := app.Run(testCase.args)
+
+			require.NoError(t, err)
+			assert.Equal(t, 29573, got)
+		})
+	}
+}
+
 func TestDocCommandPrintsGeneratedEndpointReference(t *testing.T) {
 	var output bytes.Buffer
 

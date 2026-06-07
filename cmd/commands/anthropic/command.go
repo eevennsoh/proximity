@@ -1,4 +1,4 @@
-package openai
+package anthropic
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"io"
 	"os"
 
-	"bitbucket.org/atlassian-developers/proximity/cmd/commands/openai/internal/auth"
+	"bitbucket.org/atlassian-developers/proximity/cmd/commands/anthropic/internal/auth"
 	"bitbucket.org/atlassian-developers/proximity/internal/config"
 	"bitbucket.org/atlassian-developers/proximity/internal/server"
 
@@ -16,7 +16,7 @@ import (
 )
 
 const (
-	defaultPort   = 29574
+	defaultPort   = 29573
 	portFlagName  = "port"
 	portFlagAlias = "p"
 )
@@ -24,18 +24,18 @@ const (
 //go:embed config.yaml
 var proxyConfig []byte
 
-// Command returns the openai subcommand.
+// Command returns the anthropic subcommand.
 func Command() *cli.Command {
 	return &cli.Command{
-		Name:        "openai",
-		Usage:       "Run Proximity with ChatGPT subscription authentication",
-		Description: "Run an OpenAI-compatible local proxy backed by ChatGPT OAuth credentials.",
+		Name:        "anthropic",
+		Usage:       "Run Proximity with Claude subscription authentication",
+		Description: "Run an Anthropic-compatible local proxy backed by Claude OAuth credentials.",
 		Flags: []cli.Flag{
 			portFlag(),
 			&cli.StringFlag{
 				Name:    "credentials-file",
-				Usage:   "Path to the OpenAI credential file",
-				EnvVars: []string{"PROXIMITY_OPENAI_CREDENTIALS_FILE"},
+				Usage:   "Path to the Anthropic credential file",
+				EnvVars: []string{"PROXIMITY_ANTHROPIC_CREDENTIALS_FILE"},
 			},
 		},
 		Action: run,
@@ -63,7 +63,7 @@ func portFlag() cli.Flag {
 func serveCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "serve",
-		Usage:  "Start the OpenAI-compatible proxy",
+		Usage:  "Start the Anthropic-compatible proxy",
 		Flags:  []cli.Flag{portFlag()},
 		Action: run,
 	}
@@ -72,14 +72,8 @@ func serveCommand() *cli.Command {
 // loginCommand returns the credential login subcommand.
 func loginCommand() *cli.Command {
 	return &cli.Command{
-		Name:  "login",
-		Usage: "Authenticate with ChatGPT OAuth",
-		Flags: []cli.Flag{
-			&cli.BoolFlag{
-				Name:  "device",
-				Usage: "Use device-code login instead of browser login",
-			},
-		},
+		Name:   "login",
+		Usage:  "Authenticate with Claude OAuth",
 		Action: login,
 	}
 }
@@ -88,7 +82,7 @@ func loginCommand() *cli.Command {
 func statusCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "status",
-		Usage:  "Show ChatGPT OAuth credential status",
+		Usage:  "Show Claude OAuth credential status",
 		Action: status,
 	}
 }
@@ -97,12 +91,12 @@ func statusCommand() *cli.Command {
 func logoutCommand() *cli.Command {
 	return &cli.Command{
 		Name:   "logout",
-		Usage:  "Remove stored ChatGPT OAuth credentials",
+		Usage:  "Remove stored Claude OAuth credentials",
 		Action: logout,
 	}
 }
 
-// newAuth creates the OpenAI auth service configured by CLI flags.
+// newAuth creates the Anthropic auth service configured by CLI flags.
 func newAuth(c *cli.Context) (auth.Interface, error) {
 	options := make([]auth.Option, 0, 2)
 	options = append(options, auth.WithBrowserOpener(browser.OpenURL))
@@ -114,7 +108,7 @@ func newAuth(c *cli.Context) (auth.Interface, error) {
 	return auth.New(options...)
 }
 
-// run starts the OpenAI-compatible proxy using ChatGPT OAuth credentials.
+// run starts the Anthropic-compatible proxy using Claude OAuth credentials.
 func run(c *cli.Context) error {
 	authService, err := newAuth(c)
 	if err != nil {
@@ -130,7 +124,7 @@ func run(c *cli.Context) error {
 		Config:          cfg,
 		Port:            commandPort(c),
 		Vars:            make(map[string]any),
-		TemplateOptions: openaiTemplateOptions(authService),
+		TemplateOptions: anthropicTemplateOptions(authService),
 	})
 }
 
@@ -156,15 +150,11 @@ func contextHasLocalPortFlag(c *cli.Context) bool {
 	return false
 }
 
-// login stores ChatGPT OAuth credentials using browser or device login.
+// login stores Claude OAuth credentials using browser login.
 func login(c *cli.Context) error {
 	authService, err := newAuth(c)
 	if err != nil {
 		return err
-	}
-
-	if c.Bool("device") {
-		return authService.LoginWithDevice(commandContext(c), commandOutput(c))
 	}
 
 	return authService.LoginWithBrowser(commandContext(c), commandOutput(c))
@@ -192,12 +182,6 @@ func status(c *cli.Context) error {
 		return err
 	}
 
-	if credentialStatus.AccountId != "" {
-		if _, err := fmt.Fprintf(output, "account: %s\n", credentialStatus.AccountId); err != nil {
-			return err
-		}
-	}
-
 	if !credentialStatus.ExpiresAt.IsZero() {
 		if _, err := fmt.Fprintf(output, "expires: %s\n", credentialStatus.ExpiresAt.Format("2006-01-02T15:04:05Z07:00")); err != nil {
 			return err
@@ -213,7 +197,7 @@ func status(c *cli.Context) error {
 	return err
 }
 
-// logout removes stored ChatGPT OAuth credentials.
+// logout removes stored Claude OAuth credentials.
 func logout(c *cli.Context) error {
 	authService, err := newAuth(c)
 	if err != nil {

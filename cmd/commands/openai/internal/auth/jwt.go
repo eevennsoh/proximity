@@ -50,6 +50,10 @@ func extractAccountId(token string) (string, error) {
 		return "", nil
 	}
 
-	accountId, _ := organization[idClaim].(string)
+	accountId, ok := organization[idClaim].(string)
+	if !ok {
+		return "", nil
+	}
+
 	return accountId, nil
 }

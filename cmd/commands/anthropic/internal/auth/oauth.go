@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	internaloauth "bitbucket.org/atlassian-developers/proximity/internal/oauth"
@@ -16,8 +16,11 @@ import (
 
 const (
 	oauthAuthorizePath  = "/oauth/authorize"
-	oauthTokenPath      = "/oauth/token"
-	oauthScope          = "openid profile email offline_access"
+	oauthTokenPath      = "/v1/oauth/token"
+	oauthCallbackPath   = "/callback"
+	oauthScope          = "org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"
+	anthropicUserAgent  = "claude-cli/1.0.0"
+	anthropicAppHeader  = "cli"
 	browserLoginTimeout = 5 * time.Minute
 	pkceVerifierLength  = 43
 )
@@ -25,12 +28,11 @@ const (
 type tokenClient struct {
 	client   httpClient
 	clientId string
-	issuer   string
+	tokenUrl string
 	now      func() time.Time
 }
 
 type tokenResponse struct {
-	IdToken      string `json:"id_token"`
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int    `json:"expires_in"`
@@ -45,12 +47,13 @@ func (s *service) loginWithBrowser(ctx context.Context, output io.Writer) error 
 
 	callbackServer, err := internaloauth.StartCallbackServer(internaloauth.CallbackServerOptions{
 		Address:        fmt.Sprintf("localhost:%d", s.oauthPort),
+		CallbackPath:   oauthCallbackPath,
 		ExpectedState:  state,
-		SuccessMessage: "OpenAI login complete. You can close this tab.",
-		CancelMessage:  "OpenAI login cancelled.",
+		SuccessMessage: "Anthropic login complete. You can close this tab.",
+		CancelMessage:  "Anthropic login cancelled.",
 	})
 	if err != nil {
-		return fmt.Errorf("failed to start openai browser login callback server: %w", err)
+		return fmt.Errorf("failed to start anthropic browser login callback server: %w", err)
 	}
 	defer callbackServer.Close()
 
@@ -67,14 +70,14 @@ func (s *service) loginWithBrowser(ctx context.Context, output io.Writer) error 
 
 	result, err := callbackServer.Wait(waitCtx)
 	if errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("openai browser login timed out: %w", err)
+		return fmt.Errorf("anthropic browser login timed out: %w", err)
 	}
 
 	if err != nil {
 		return err
 	}
 
-	credentials, err := s.tokens.exchangeAuthorizationCode(ctx, result.Code, s.browserRedirectUri(), verifier)
+	credentials, err := s.tokens.exchangeAuthorizationCode(ctx, result.Code, verifier, s.browserRedirectUri())
 	if err != nil {
 		return err
 	}
@@ -82,14 +85,14 @@ func (s *service) loginWithBrowser(ctx context.Context, output io.Writer) error 
 	return s.store.Save(credentials)
 }
 
-// Refresh exchanges expired OpenAI credentials for updated credentials.
+// Refresh exchanges expired Anthropic credentials for updated credentials.
 func (c *tokenClient) Refresh(ctx context.Context, credentials internaloauth.Credentials) (internaloauth.Credentials, error) {
-	form := url.Values{}
-	form.Set("grant_type", "refresh_token")
-	form.Set("refresh_token", credentials.Refresh)
-	form.Set("client_id", c.clientId)
+	body := make(map[string]string)
+	body["grant_type"] = "refresh_token"
+	body["client_id"] = c.clientId
+	body["refresh_token"] = credentials.Refresh
 
-	tokens, err := c.postTokenForm(ctx, form)
+	tokens, err := c.postTokenJson(ctx, body)
 	if err != nil {
 		return internaloauth.Credentials{}, err
 	}
@@ -98,15 +101,16 @@ func (c *tokenClient) Refresh(ctx context.Context, credentials internaloauth.Cre
 }
 
 // exchangeAuthorizationCode exchanges an authorization code for stored credentials.
-func (c *tokenClient) exchangeAuthorizationCode(ctx context.Context, code string, redirectUri string, verifier string) (internaloauth.Credentials, error) {
-	form := url.Values{}
-	form.Set("grant_type", "authorization_code")
-	form.Set("code", code)
-	form.Set("redirect_uri", redirectUri)
-	form.Set("client_id", c.clientId)
-	form.Set("code_verifier", verifier)
+func (c *tokenClient) exchangeAuthorizationCode(ctx context.Context, code string, verifier string, redirectUri string) (internaloauth.Credentials, error) {
+	body := make(map[string]string)
+	body["grant_type"] = "authorization_code"
+	body["client_id"] = c.clientId
+	body["code"] = code
+	body["state"] = verifier
+	body["redirect_uri"] = redirectUri
+	body["code_verifier"] = verifier
 
-	tokens, err := c.postTokenForm(ctx, form)
+	tokens, err := c.postTokenJson(ctx, body)
 	if err != nil {
 		return internaloauth.Credentials{}, err
 	}
@@ -114,14 +118,21 @@ func (c *tokenClient) exchangeAuthorizationCode(ctx context.Context, code string
 	return c.credentialsFromTokenResponse(tokens, ""), nil
 }
 
-// postTokenForm posts an OAuth form to the token endpoint and decodes the response.
-func (c *tokenClient) postTokenForm(ctx context.Context, form url.Values) (tokenResponse, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.issuer+oauthTokenPath, strings.NewReader(form.Encode()))
+// postTokenJson posts an OAuth JSON body to the token endpoint and decodes the response.
+func (c *tokenClient) postTokenJson(ctx context.Context, body map[string]string) (tokenResponse, error) {
+	encoded, err := json.Marshal(body)
 	if err != nil {
 		return tokenResponse{}, err
 	}
 
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.tokenUrl, bytes.NewReader(encoded))
+	if err != nil {
+		return tokenResponse{}, err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("User-Agent", anthropicUserAgent)
+	req.Header.Set("X-App", anthropicAppHeader)
 
 	resp, err := c.client.Do(req)
 	if err != nil {
@@ -129,18 +140,18 @@ func (c *tokenClient) postTokenForm(ctx context.Context, form url.Values) (token
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return tokenResponse{}, err
 	}
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return tokenResponse{}, fmt.Errorf("openai token endpoint returned HTTP %d: %s", resp.StatusCode, string(body))
+		return tokenResponse{}, fmt.Errorf("anthropic token endpoint returned HTTP %d: %s", resp.StatusCode, string(responseBody))
 	}
 
 	var tokens tokenResponse
 
-	if err := json.Unmarshal(body, &tokens); err != nil {
+	if err := json.Unmarshal(responseBody, &tokens); err != nil {
 		return tokenResponse{}, err
 	}
 
@@ -161,35 +172,12 @@ func (c *tokenClient) credentialsFromTokenResponse(tokens tokenResponse, fallbac
 		expiresIn = 3600
 	}
 
-	credentials := internaloauth.Credentials{
+	return internaloauth.Credentials{
 		Type:    internaloauth.CredentialTypeOauth,
 		Refresh: refresh,
 		Access:  tokens.AccessToken,
 		Expires: c.now().Add(time.Duration(expiresIn) * time.Second).UnixMilli(),
 	}
-
-	accountId := accountIdFromTokenResponse(tokens)
-	if accountId != "" {
-		credentials.Metadata = make(map[string]string)
-		credentials.Metadata[accountIdMetadataKey] = accountId
-	}
-
-	return credentials
-}
-
-// accountIdFromTokenResponse returns the first account ID exposed by the OAuth tokens.
-func accountIdFromTokenResponse(tokens tokenResponse) string {
-	accountId, err := extractAccountId(tokens.IdToken)
-	if err == nil && accountId != "" {
-		return accountId
-	}
-
-	accountId, err = extractAccountId(tokens.AccessToken)
-	if err == nil {
-		return accountId
-	}
-
-	return ""
 }
 
 // authorizationUrl returns the browser OAuth URL and verifier state.
@@ -199,27 +187,21 @@ func (s *service) authorizationUrl() (string, string, string, error) {
 		return "", "", "", err
 	}
 
-	state, err := internaloauth.RandomBase64Url(pkceVerifierLength)
-	if err != nil {
-		return "", "", "", err
-	}
-
+	state := pair.Verifier
 	values := url.Values{}
+	values.Set("code", "true")
 	values.Set("response_type", "code")
 	values.Set("client_id", s.clientId)
 	values.Set("redirect_uri", s.browserRedirectUri())
 	values.Set("scope", oauthScope)
 	values.Set("code_challenge", pair.Challenge)
 	values.Set("code_challenge_method", "S256")
-	values.Set("id_token_add_organizations", "true")
-	values.Set("codex_cli_simplified_flow", "true")
 	values.Set("state", state)
-	values.Set("originator", "opencode")
 
-	return s.issuer + oauthAuthorizePath + "?" + values.Encode(), pair.Verifier, state, nil
+	return s.authorizeUrl + "?" + values.Encode(), pair.Verifier, state, nil
 }
 
 // browserRedirectUri returns the local OAuth callback URL.
 func (s *service) browserRedirectUri() string {
-	return fmt.Sprintf("http://localhost:%d/auth/callback", s.oauthPort)
+	return fmt.Sprintf("http://localhost:%d%s", s.oauthPort, oauthCallbackPath)
 }

@@ -98,13 +98,7 @@ func TestLoginWithBrowserExchangesCallbackCode(t *testing.T) {
 
 	credentials, err := store.Load()
 	require.NoError(t, err)
-	assert.Equal(t, Credentials{
-		Type:      credentialTypeOauth,
-		Refresh:   "browser-refresh-token",
-		Access:    "browser-access-token",
-		Expires:   fixedNow.Add(time.Hour).UnixMilli(),
-		AccountId: "account-from-browser",
-	}, credentials)
+	assert.Equal(t, openaiCredentialsForTest("browser-access-token", "browser-refresh-token", fixedNow.Add(time.Hour), "account-from-browser"), credentials)
 	assert.Contains(t, output.String(), "opened browser")
 }
 
