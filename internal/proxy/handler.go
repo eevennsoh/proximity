@@ -222,11 +222,16 @@ func (s *server) handleForward(w http.ResponseWriter, r *http.Request, fwd *conf
 	s.router.ServeHTTP(w, newReq)
 }
 
+// endpointProxy creates the outbound reverse proxy for a configured endpoint.
+// Forwarded proxy metadata is purged so upstream APIs receive direct-client requests.
 func (s *server) endpointProxy(cfg *endpointProxyConfig) *httputil.ReverseProxy {
-	proxy := httputil.NewSingleHostReverseProxy(cfg.baseEndpoint)
-	proxy.ModifyResponse = s.modifyResponse(cfg)
-
-	return proxy
+	return &httputil.ReverseProxy{
+		Rewrite: func(proxyRequest *httputil.ProxyRequest) {
+			proxyRequest.SetURL(cfg.baseEndpoint)
+			proxyRequest.Out.Host = cfg.baseEndpoint.Host
+		},
+		ModifyResponse: s.modifyResponse(cfg),
+	}
 }
 
 func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
