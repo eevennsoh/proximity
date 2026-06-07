@@ -1,6 +1,7 @@
 package template
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -22,38 +23,61 @@ type Renderer struct {
 	logger *log.Logger
 	mu     sync.RWMutex
 
+	exprFunctions     map[string]RenderFunction
+	templateFunctions map[string]RenderFunction
+
 	// Storage which lasts for the lifetime of the proxy.
 	permanentStorage map[string]string
 }
 
-func NewRenderer(logger *log.Logger) *Renderer {
-	return &Renderer{
-		logger:           logger,
-		permanentStorage: make(map[string]string),
+// NewRenderer creates a renderer with optional helpers.
+func NewRenderer(logger *log.Logger, optionList ...Option) *Renderer {
+	options := rendererOptions{}
+
+	for _, option := range optionList {
+		option(&options)
 	}
+
+	return &Renderer{
+		logger:            logger,
+		exprFunctions:     copyRenderFunctions(options.exprFunctions),
+		templateFunctions: copyRenderFunctions(options.templateFunctions),
+		permanentStorage:  make(map[string]string),
+	}
+}
+
+// copyRenderFunctions returns a stable copy of custom render helpers.
+func copyRenderFunctions(functions map[string]RenderFunction) map[string]RenderFunction {
+	copiedFunctions := make(map[string]RenderFunction)
+
+	for name, function := range functions {
+		copiedFunctions[name] = function
+	}
+
+	return copiedFunctions
 }
 
 // Render renders content using either Expr or Go template, based on which is provided.
 // If both are provided, Expr takes priority.
 // Returns nil if neither is provided.
-func (r *Renderer) Render(templateStr, exprStr string, input map[string]any, storage map[string]string) ([]byte, error) {
+func (r *Renderer) Render(ctx context.Context, templateStr, exprStr string, input map[string]any, storage map[string]string) ([]byte, error) {
 	// Expr takes priority if both are provided
 	if strings.TrimSpace(exprStr) != "" {
-		return r.RenderExpr(exprStr, input, storage)
+		return r.RenderExpr(ctx, exprStr, input, storage)
 	}
 
 	// Fall back to Go template
 	if strings.TrimSpace(templateStr) != "" {
-		return r.RenderTemplate(templateStr, input, storage)
+		return r.RenderTemplate(ctx, templateStr, input, storage)
 	}
 
 	// Neither provided - return nil (no rendering needed)
 	return nil, nil
 }
 
-// RenderTemplate renders using Go text/template
-func (r *Renderer) RenderTemplate(templateStr string, input map[string]any, storage map[string]string) ([]byte, error) {
-	tmpl, err := template.New("body").Funcs(r.FunctionsWithStorage(storage)).Parse(templateStr)
+// RenderTemplate renders using Go text/template.
+func (r *Renderer) RenderTemplate(ctx context.Context, templateStr string, input map[string]any, storage map[string]string) ([]byte, error) {
+	tmpl, err := template.New("body").Funcs(r.FunctionsWithStorage(ctx, storage)).Parse(templateStr)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +91,9 @@ func (r *Renderer) RenderTemplate(templateStr string, input map[string]any, stor
 	return []byte(buf.String()), nil
 }
 
-func (r *Renderer) FunctionsWithStorage(temporaryStorage map[string]string) template.FuncMap {
-	return template.FuncMap{
+// FunctionsWithStorage returns template helpers bound to the provided request storage.
+func (r *Renderer) FunctionsWithStorage(ctx context.Context, temporaryStorage map[string]string) template.FuncMap {
+	functions := template.FuncMap{
 		"toJson":                 r.toJsonFn,
 		"getType":                r.getTypeFn,
 		"safeEncode":             r.safeEncodeFn,
@@ -83,7 +108,38 @@ func (r *Renderer) FunctionsWithStorage(temporaryStorage map[string]string) temp
 		"regexReplace":           r.regexReplaceFn,
 		"slauthtokenWithCommand": r.slauthTokenWithCommandFn,
 		"slauthtoken":            r.slauthTokenFn,
+		"slauthUsername":         r.slauthUsernameFn,
 	}
+
+	for name, function := range r.templateFunctions {
+		renderFunction := function
+		functions[name] = func(params ...any) (any, error) {
+			return renderFunction(ctx, params...)
+		}
+	}
+
+	return functions
+}
+
+func (r *Renderer) getUsernameFromToken(token string) (string, error) {
+	parser := jwt.NewParser()
+
+	parsed, _, err := parser.ParseUnverified(token, jwt.MapClaims{})
+	if err != nil {
+		return "", fmt.Errorf("failed to parse token: %w", err)
+	}
+
+	claims, ok := parsed.Claims.(jwt.MapClaims)
+	if !ok {
+		return "", fmt.Errorf("failed to extract claims from token")
+	}
+
+	sub, err := claims.GetSubject()
+	if err != nil {
+		return "", fmt.Errorf("failed to get sub claim: %w", err)
+	}
+
+	return sub, nil
 }
 
 func (r *Renderer) tokenHasExpired(token string) bool {
@@ -209,6 +265,20 @@ func (r *Renderer) slauthTokenWithCommandFn(groups []string, audience string, en
 
 func (r *Renderer) slauthTokenFn(groups []string, audience string, environment string) (string, error) {
 	return r.getSlauthToken(groups, audience, environment, r.requestSlauthToken)
+}
+
+func (r *Renderer) slauthUsernameFn(groups []string, audience string, environment string) (string, error) {
+	cacheKey := fmt.Sprintf("token:%s:%s:%s", strings.Join(groups, ","), audience, environment)
+
+	r.mu.RLock()
+	token, exists := r.permanentStorage[cacheKey]
+	r.mu.RUnlock()
+
+	if !exists || token == "" {
+		return "", fmt.Errorf("no cached slauth token found for %s — call slauthtoken() first", cacheKey)
+	}
+
+	return r.getUsernameFromToken(token)
 }
 
 func (r *Renderer) getSlauthToken(groups []string, audience string, environment string, slauthTokenFn func(groups []string, audience string, environment string) (string, error)) (string, error) {

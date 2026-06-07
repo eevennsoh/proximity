@@ -82,7 +82,7 @@ func (s *server) executeFetchRequest(parentCtx context.Context, req config.Fetch
 	defer cancel()
 
 	// Render URL
-	urlBytes, err := s.renderer.Render(req.Url.Template, req.Url.Expr, templateInput, nil)
+	urlBytes, err := s.renderer.Render(ctx, req.Url.Template, req.Url.Expr, templateInput, nil)
 	if err != nil {
 		return &RequestResult{Error: fmt.Sprintf("failed to render URL: %v", err)}
 	}
@@ -101,7 +101,7 @@ func (s *server) executeFetchRequest(parentCtx context.Context, req config.Fetch
 	var bodyReader io.Reader
 
 	if !req.Body.IsEmpty() {
-		bodyBytes, err := s.renderer.Render(req.Body.Template, req.Body.Expr, templateInput, nil)
+		bodyBytes, err := s.renderer.Render(ctx, req.Body.Template, req.Body.Expr, templateInput, nil)
 		if err != nil {
 			return &RequestResult{Error: fmt.Sprintf("failed to render body: %v", err)}
 		}
@@ -118,7 +118,7 @@ func (s *server) executeFetchRequest(parentCtx context.Context, req config.Fetch
 		return &RequestResult{Error: fmt.Sprintf("failed to create request: %v", err)}
 	}
 
-	if err := s.overrideHeaders(req.Headers, &httpReq.Header, templateInput, nil); err != nil {
+	if err := s.overrideHeaders(ctx, req.Headers, &httpReq.Header, templateInput, nil); err != nil {
 		return &RequestResult{Error: fmt.Sprintf("failed to render headers: %v", err)}
 	}
 
@@ -157,9 +157,9 @@ func (s *server) executeFetchRequest(parentCtx context.Context, req config.Fetch
 }
 
 // evaluateStatusCode evaluates a StatusCodeInput and returns the resulting status code.
-func (s *server) evaluateStatusCode(statusInput config.StatusCodeInput, templateInput map[string]any) int {
+func (s *server) evaluateStatusCode(ctx context.Context, statusInput config.StatusCodeInput, templateInput map[string]any) int {
 	if statusInput.Expr != "" {
-		statusBytes, err := s.renderer.Render("", statusInput.Expr, templateInput, nil)
+		statusBytes, err := s.renderer.Render(ctx, "", statusInput.Expr, templateInput, nil)
 
 		if err == nil {
 			if sc, err := strconv.Atoi(strings.TrimSpace(string(statusBytes))); err == nil {

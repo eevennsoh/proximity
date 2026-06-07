@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"bitbucket.org/atlassian-developers/proximity/internal/config"
+	"bitbucket.org/atlassian-developers/proximity/internal/template"
 )
 
 type Options struct {
@@ -12,7 +13,8 @@ type Options struct {
 	TestMode bool
 	Version  string
 
-	Logger *log.Logger
+	Logger          *log.Logger
+	TemplateOptions []template.Option
 
 	*config.Config
 

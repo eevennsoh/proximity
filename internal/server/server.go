@@ -10,22 +10,41 @@ import (
 
 	"bitbucket.org/atlassian-developers/proximity/internal/config"
 	"bitbucket.org/atlassian-developers/proximity/internal/proxy"
+	proximitytemplate "bitbucket.org/atlassian-developers/proximity/internal/template"
 )
 
+type Options struct {
+	Config          *config.Config
+	Port            int
+	Vars            map[string]any
+	TemplateOptions []proximitytemplate.Option
+}
+
+// RunServer starts the proxy with the default server options.
 func RunServer(cfg *config.Config, port int, vars map[string]any) error {
+	return RunServerWithOptions(Options{
+		Config: cfg,
+		Port:   port,
+		Vars:   vars,
+	})
+}
+
+// RunServerWithOptions starts the proxy with command-specific collaborators.
+func RunServerWithOptions(options Options) error {
 	logger := log.Default()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	go awaitStopSignal(cancel, logger)
 
-	options := proxy.Options{
-		Port:   port,
-		Logger: logger,
-		Config: cfg,
-		Vars:   vars,
+	proxyOptions := proxy.Options{
+		Port:            options.Port,
+		Logger:          logger,
+		Config:          options.Config,
+		Vars:            options.Vars,
+		TemplateOptions: options.TemplateOptions,
 	}
 
-	p := proxy.New(options)
+	p := proxy.New(proxyOptions)
 
 	go p.RunServer(ctx)
 

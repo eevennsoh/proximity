@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -25,13 +26,13 @@ type HttpResponse struct {
 }
 
 // renderRequest applies all config-driven transformations to the request and returns a new http.Request.
-func (s *server) renderRequest(req *http.Request, cfg *endpointProxyConfig, templateInput map[string]any) error {
+func (s *server) renderRequest(ctx context.Context, req *http.Request, cfg *endpointProxyConfig, templateInput map[string]any) error {
 	if !cfg.Out.IsEmpty() {
 		renderedPath := cfg.Out.Text
 
 		if cfg.Out.Text == "" {
 			// Use unified render to support both Template and Expr
-			renderedPathBytes, err := s.renderer.Render(cfg.Out.Template, cfg.Out.Expr, templateInput, nil)
+			renderedPathBytes, err := s.renderer.Render(ctx, cfg.Out.Template, cfg.Out.Expr, templateInput, nil)
 			if err != nil {
 				return err
 			}
@@ -43,12 +44,12 @@ func (s *server) renderRequest(req *http.Request, cfg *endpointProxyConfig, temp
 		req.RequestURI = renderedPath
 	}
 
-	if err := s.overrideHeaders(cfg.Request.Headers, &req.Header, templateInput, nil); err != nil {
+	if err := s.overrideHeaders(ctx, cfg.Request.Headers, &req.Header, templateInput, nil); err != nil {
 		return err
 	}
 
 	// Apply body patches/overrides as per config
-	if err := s.overrideRequestBody(req, templateInput, cfg.Request.Body); err != nil {
+	if err := s.overrideRequestBody(ctx, req, templateInput, cfg.Request.Body); err != nil {
 		return fmt.Errorf("error applying body override: %v", err)
 	}
 
@@ -56,13 +57,13 @@ func (s *server) renderRequest(req *http.Request, cfg *endpointProxyConfig, temp
 }
 
 // renderResponse applies all config-driven transformations to the response and returns a new http.Reponse.
-func (s *server) renderResponse(res *http.Response, cfg *endpointProxyConfig, templateInput map[string]any) error {
-	if err := s.overrideHeaders(cfg.Response.Headers, &res.Header, templateInput, nil); err != nil {
+func (s *server) renderResponse(ctx context.Context, res *http.Response, cfg *endpointProxyConfig, templateInput map[string]any) error {
+	if err := s.overrideHeaders(ctx, cfg.Response.Headers, &res.Header, templateInput, nil); err != nil {
 		return err
 	}
 
 	// Apply body patches/overrides as per config
-	if err := s.overrideResponseBody(res, templateInput, cfg.Response.Body); err != nil {
+	if err := s.overrideResponseBody(ctx, res, templateInput, cfg.Response.Body); err != nil {
 		return fmt.Errorf("error applying body override: %v", err)
 	}
 
@@ -134,10 +135,24 @@ func copyBody(body *io.ReadCloser) ([]byte, error) {
 	return bodyBytes, nil
 }
 
+// setHeaderPreservingCase sets a header value while preserving the exact case
+// of the header name (Go's http.Header.Set canonicalizes the case).
+func setHeaderPreservingCase(h *http.Header, name, value string) {
+	if h == nil {
+		return
+	}
+
+	// Remove any existing entry (canonical form)
+	h.Del(name)
+
+	// Write directly to the underlying map to preserve case
+	(*h)[name] = []string{value}
+}
+
 // overrides all the headers and renders the header values at the end to make sure than render functions aren't called
 // for routes than they aren't included in. E.g. for headless requests if not done in two steps, the slauth token would
 // be requested even though the header gets removed after.
-func (s *server) overrideHeaders(headerOperations []config.Header, originalHeaders *http.Header, templateInput map[string]any, tmpRenderStorage map[string]string) error {
+func (s *server) overrideHeaders(ctx context.Context, headerOperations []config.Header, originalHeaders *http.Header, templateInput map[string]any, tmpRenderStorage map[string]string) error {
 	// Track render info for headers that need it
 	headerRenderInfo := make(map[string]config.Input)
 
@@ -154,13 +169,13 @@ func (s *server) overrideHeaders(headerOperations []config.Header, originalHeade
 		}
 
 		// Use unified render to support both Template and Expr in header values
-		renderedHeaderValueBytes, err := s.renderer.Render(input.Template, input.Expr, templateInput, tmpRenderStorage)
+		renderedHeaderValueBytes, err := s.renderer.Render(ctx, input.Template, input.Expr, templateInput, tmpRenderStorage)
 		if err != nil {
 			return err
 		}
 
 		originalHeaders.Del(headerKey)
-		originalHeaders.Set(headerKey, string(renderedHeaderValueBytes))
+		setHeaderPreservingCase(originalHeaders, headerKey, string(renderedHeaderValueBytes))
 	}
 
 	return nil
@@ -188,7 +203,7 @@ func (s *server) overrideHeader(header config.Header, originalHeaders *http.Head
 
 	if header.Expr != "" || header.Template != "" {
 		// Store the expr/template string as a placeholder (or empty)
-		originalHeaders.Set(header.Name, "")
+		setHeaderPreservingCase(originalHeaders, header.Name, "")
 
 		// Track render info
 		headerRenderInfo[strings.ToLower(header.Name)] = config.Input{
@@ -200,7 +215,7 @@ func (s *server) overrideHeader(header config.Header, originalHeaders *http.Head
 	}
 
 	if header.Text != "" {
-		originalHeaders.Set(header.Name, header.Text)
+		setHeaderPreservingCase(originalHeaders, header.Name, header.Text)
 		return nil
 	}
 
@@ -210,7 +225,7 @@ func (s *server) overrideHeader(header config.Header, originalHeaders *http.Head
 			return err
 		}
 
-		originalHeaders.Set(header.Name, string(bytesStr))
+		setHeaderPreservingCase(originalHeaders, header.Name, string(bytesStr))
 		return nil
 	}
 
@@ -230,6 +245,6 @@ func (s *server) overrideHeader(header config.Header, originalHeaders *http.Head
 		return err
 	}
 
-	originalHeaders.Set(header.Name, val)
+	setHeaderPreservingCase(originalHeaders, header.Name, val)
 	return nil
 }

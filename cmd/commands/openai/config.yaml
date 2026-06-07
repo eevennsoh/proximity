@@ -1,0 +1,108 @@
+baseEndpoint: |
+  "https://chatgpt.com"
+
+uriGroups:
+  - name: Health Check
+    supportedUris:
+      - in: /health
+        description: Health check endpoint
+        out:
+          - method: GET
+
+  - name: OpenAI
+    supportedUris:
+      - in: /v1/models
+        description: List ChatGPT subscription models
+        out:
+          - method: GET
+
+      - in: /v1/responses
+        description: Responses endpoint
+        out:
+          - method: POST
+            text: /backend-api/codex/responses
+
+overrides:
+  global:
+    request:
+      headers:
+        - op: remove
+        - op: add
+          name: Authorization
+          expr: '"Bearer " + openaiAccessToken()'
+        - op: add
+          name: ChatGPT-Account-Id
+          expr: openaiAccountId()
+        - op: add
+          name: Content-Type
+          text: application/json
+        - op: add
+          name: Accept
+          text: application/json
+        - op: add
+          name: originator
+          text: opencode
+        - op: add
+          name: User-Agent
+          text: opencode/0.0.0
+
+    response:
+      headers:
+        - op: remove
+        - op: add
+          name: Content-Type
+          text: application/json
+
+  uris:
+    /health:
+      GET:
+        response:
+          statusCode:
+            int: 200
+          body:
+            text: '{"status":"ok"}'
+
+    /v1/models:
+      GET:
+        response:
+          statusCode:
+            int: 200
+          body:
+            text: '{"object":"list","data":[{"id":"gpt-5.5","object":"model","owned_by":"openai"},{"id":"gpt-5.4","object":"model","owned_by":"openai"},{"id":"gpt-5.4-mini","object":"model","owned_by":"openai"},{"id":"gpt-5.3-codex-spark","object":"model","owned_by":"openai"}]}'
+
+    /v1/responses:
+      POST:
+        request:
+          headers:
+            - op: add
+              name: Accept
+              text: text/event-stream
+            - op: add
+              name: Accept-Encoding
+              text: identity
+            - op: add
+              name: session-id
+              expr: getIndex(headers["Session-Id"], 0) ?? getIndex(headers["session-id"], 0) ?? ""
+          body:
+            expr: |
+              let input = get(body, "input");
+              let inputItems = type(input) == "string" ? [{"role": "user", "content": input}] : input;
+              let statelessInput = inputItems != nil && type(inputItems) == "slice" ? map(
+                filter(inputItems, type(#) == "map" ? get(#, "type") != "item_reference" : true),
+                type(#) == "map" ? filterOutKeys(#, ["id"]) : #
+              ) : inputItems;
+
+              toCompactJson(merge(filterOutKeys(body, ["instructions", "store", "stream", "input"]), input != nil ? {
+                "input": statelessInput
+              } : {}, {
+                "instructions": trim(get(body, "instructions") ?? "") != "" ? get(body, "instructions") : "You are a helpful assistant.",
+                "store": false,
+                "stream": true
+              }))
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: |
+                let contentType = getIndex(headers["Content-Type"], 0) ?? "";
+                trim(contentType) != "" ? contentType : "text/event-stream"

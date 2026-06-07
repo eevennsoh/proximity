@@ -2,6 +2,8 @@ package template
 
 import (
 	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -10,8 +12,8 @@ import (
 	"github.com/expr-lang/expr"
 )
 
-// RenderExpr renders an Expr expression with the given environment and storage
-func (r *Renderer) RenderExpr(exprStr string, env map[string]any, temporaryStorage map[string]string) ([]byte, error) {
+// RenderExpr renders an Expr expression with the given environment and storage.
+func (r *Renderer) RenderExpr(ctx context.Context, exprStr string, env map[string]any, temporaryStorage map[string]string) ([]byte, error) {
 	if temporaryStorage == nil {
 		temporaryStorage = make(map[string]string)
 	}
@@ -32,12 +34,22 @@ func (r *Renderer) RenderExpr(exprStr string, env map[string]any, temporaryStora
 		expr.Function("regexReplace", r.exprRegexReplace),
 		expr.Function("slauthtokenWithCommand", r.exprSlauthTokenWithCommand),
 		expr.Function("slauthtoken", r.exprSlauthToken),
+		expr.Function("slauthUsername", r.exprSlauthUsername),
 		expr.Function("filterOutKeys", r.exprFilterOutKeys),
 		expr.Function("merge", r.exprMerge),
 		expr.Function("toCompactJson", r.exprToCompactJson),
 		expr.Function("getIndex", r.exprGetIndex),
 		expr.Function("regexReplaceAll", r.exprRegexReplaceAll),
 		expr.Function("log", r.exprLog),
+		expr.Function("base64", r.exprBase64),
+	}
+
+	for name, function := range r.exprFunctions {
+		renderFunction := function
+
+		options = append(options, expr.Function(name, func(params ...any) (any, error) {
+			return renderFunction(ctx, params...)
+		}))
 	}
 
 	program, err := expr.Compile(exprStr, options...)
@@ -207,6 +219,24 @@ func (r *Renderer) exprSlauthToken(params ...any) (any, error) {
 	return r.slauthTokenFn(groups, audience, environment)
 }
 
+func (r *Renderer) exprSlauthUsername(params ...any) (any, error) {
+	if len(params) != 3 {
+		return nil, fmt.Errorf("slauthusername expects 3 arguments (groups, audience, environment)")
+	}
+
+	groupsAny := params[0].([]any)
+	groups := make([]string, 0, len(groupsAny))
+
+	for _, group := range groupsAny {
+		groups = append(groups, fmt.Sprint(group))
+	}
+
+	audience := fmt.Sprint(params[1])
+	environment := fmt.Sprint(params[2])
+
+	return r.slauthUsernameFn(groups, audience, environment)
+}
+
 func (r *Renderer) exprFilterOutKeys(params ...any) (any, error) {
 	if len(params) != 2 {
 		return nil, fmt.Errorf("filterOutKeys expects 2 arguments (map, keys)")
@@ -370,4 +400,11 @@ func (r *Renderer) exprLog(params ...any) (any, error) {
 
 	r.logger.Println(params...)
 	return nil, nil
+}
+
+func (r *Renderer) exprBase64(params ...any) (any, error) {
+	if len(params) != 1 {
+		return nil, fmt.Errorf("base64 expects 1 argument (input string)")
+	}
+	return base64.StdEncoding.EncodeToString([]byte(fmt.Sprint(params[0]))), nil
 }
