@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"testing"
@@ -28,7 +29,7 @@ func TestClaudeRoutesStripContextManagement(t *testing.T) {
 		for _, route := range routes {
 			t.Run(configPath+" "+route, func(t *testing.T) {
 				bodyExpr := cfg.Overrides.Uris[route]["POST"].Request.Body.Expr
-				rendered, err := template.NewRenderer(nil).RenderExpr(bodyExpr, map[string]any{
+				rendered, err := template.NewRenderer(nil).RenderExpr(context.Background(), bodyExpr, map[string]any{
 					"body": map[string]any{
 						"model":              "claude-opus-4-5-20251101",
 						"stream":             false,

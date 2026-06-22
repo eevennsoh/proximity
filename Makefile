@@ -83,8 +83,13 @@ reset-changelog-history:
 		echo "No localStorage database found. Run the app first to create it."; \
 	fi
 
+.PHONY: test generate-mocks
 test:
 	go test -cover ./internal/...
+
+generate-mocks:
+	@command -v mockgen >/dev/null 2>&1 || { echo "mockgen not found on PATH. Run: go install go.uber.org/mock/mockgen@latest"; exit 1; }
+	go generate ./...
 
 ###################################################################################################
 

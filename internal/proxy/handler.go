@@ -3,6 +3,7 @@ package proxy
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -30,7 +31,18 @@ type endpointProxyConfig struct {
 
 func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 	return func(res *http.Response) error {
+		ctx := context.Background()
 		contentType := res.Header.Get("Content-Type")
+
+		if res.Request != nil {
+			ctx = res.Request.Context()
+
+			// Attempt to get set the Content-Type header if it is missing from
+			// the response
+			if strings.TrimSpace(contentType) == "" {
+				contentType = res.Request.Header.Get("Accept")
+			}
+		}
 
 		// If we're not getting a stream back then just log out the response
 		// and stop there.
@@ -40,7 +52,7 @@ func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 				return err
 			}
 
-			return s.renderResponse(res, cfg, templateInput)
+			return s.renderResponse(ctx, res, cfg, templateInput)
 		}
 
 		templateInput, err := s.buildTemplateInputFromResponse(res, false)
@@ -48,15 +60,15 @@ func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 			return err
 		}
 
-		if err := s.overrideHeaders(cfg.Response.Headers, &res.Header, templateInput, nil); err != nil {
+		if err := s.overrideHeaders(ctx, cfg.Response.Headers, &res.Header, templateInput, nil); err != nil {
 			return err
 		}
 
-		return s.processSseLines(res, cfg)
+		return s.processSseLines(ctx, res, cfg)
 	}
 }
 
-func (s *server) processSseLines(res *http.Response, cfg *endpointProxyConfig) error {
+func (s *server) processSseLines(ctx context.Context, res *http.Response, cfg *endpointProxyConfig) error {
 	pr, pw := io.Pipe()
 	orig := res.Body
 
@@ -82,7 +94,7 @@ func (s *server) processSseLines(res *http.Response, cfg *endpointProxyConfig) e
 			}
 
 			// Modify the line as needed here
-			modifiedLine, err := s.processSseLine(line, cfg.Response.Body, renderStorage)
+			modifiedLine, err := s.processSseLine(ctx, line, cfg.Response.Body, renderStorage)
 			if err != nil {
 				s.Logger.Println(err)
 				break
@@ -101,7 +113,7 @@ func (s *server) processSseLines(res *http.Response, cfg *endpointProxyConfig) e
 
 // processSseLine allows you to modify each SSE line as it comes through.
 // For now, it just logs and returns the line unmodified.
-func (s *server) processSseLine(line string, bodyOverride config.Body, renderStorage map[string]string) (string, error) {
+func (s *server) processSseLine(ctx context.Context, line string, bodyOverride config.Body, renderStorage map[string]string) (string, error) {
 	// No overrides defined, return as is
 	if bodyOverride.Template == "" && bodyOverride.Expr == "" {
 		return line, nil
@@ -113,7 +125,7 @@ func (s *server) processSseLine(line string, bodyOverride config.Body, renderSto
 	}
 
 	// Use unified render to support both Template and Expr
-	renderedEventBytes, err := s.renderer.Render(bodyOverride.Template, bodyOverride.Expr, templateInput, renderStorage)
+	renderedEventBytes, err := s.renderer.Render(ctx, bodyOverride.Template, bodyOverride.Expr, templateInput, renderStorage)
 	if err != nil {
 		return "", err
 	}
@@ -135,7 +147,7 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 		// Build the template variable map to use the render everything
 		templateInput, err := s.buildTemplateInputFromRequest(r)
 		if err != nil {
-			s.Logger.Println(err)
+			s.writeRequestError(w, "failed to build proxy request", err)
 			return
 		}
 
@@ -162,8 +174,8 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 			return
 		}
 
-		if err := s.renderRequest(r, cfg, templateInput); err != nil {
-			s.Logger.Println(err)
+		if err := s.renderRequest(r.Context(), r, cfg, templateInput); err != nil {
+			s.writeRequestError(w, "failed to render proxy request", err)
 			return
 		}
 
@@ -178,13 +190,19 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 	}
 }
 
+// writeRequestError logs a request processing failure and returns a non-empty error response.
+func (s *server) writeRequestError(w http.ResponseWriter, message string, err error) {
+	s.Logger.Printf("%s: %v", message, err)
+	http.Error(w, message, http.StatusInternalServerError)
+}
+
 func (s *server) handleForward(w http.ResponseWriter, r *http.Request, fwd *config.Forward, templateInput map[string]any) {
 	// Shared render storage between the path expression and the headers so data can be shared from the path expression
 	// to the header rendering
 	tmpRenderStorage := make(map[string]string)
 
 	// Evaluate path expression
-	pathBytes, err := s.renderer.Render(fwd.Path.Template, fwd.Path.Expr, templateInput, tmpRenderStorage)
+	pathBytes, err := s.renderer.Render(r.Context(), fwd.Path.Template, fwd.Path.Expr, templateInput, tmpRenderStorage)
 	if err != nil {
 		s.Logger.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -198,7 +216,7 @@ func (s *server) handleForward(w http.ResponseWriter, r *http.Request, fwd *conf
 	newReq.URL.Path = newPath
 	newReq.RequestURI = newPath
 
-	if err := s.overrideHeaders(fwd.Headers, &newReq.Header, templateInput, tmpRenderStorage); err != nil {
+	if err := s.overrideHeaders(r.Context(), fwd.Headers, &newReq.Header, templateInput, tmpRenderStorage); err != nil {
 		s.Logger.Println(err)
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -210,12 +228,17 @@ func (s *server) handleForward(w http.ResponseWriter, r *http.Request, fwd *conf
 	s.router.ServeHTTP(w, newReq)
 }
 
+// endpointProxy creates the outbound reverse proxy for a configured endpoint.
+// Forwarded proxy metadata is purged so upstream APIs receive direct-client requests.
 func (s *server) endpointProxy(cfg *endpointProxyConfig) *httputil.ReverseProxy {
-	proxy := httputil.NewSingleHostReverseProxy(cfg.baseEndpoint)
-	proxy.ModifyResponse = s.modifyResponse(cfg)
-	proxy.Transport = s.retryTransport()
-
-	return proxy
+	return &httputil.ReverseProxy{
+		Rewrite: func(proxyRequest *httputil.ProxyRequest) {
+			proxyRequest.SetURL(cfg.baseEndpoint)
+			proxyRequest.Out.Host = cfg.baseEndpoint.Host
+		},
+		ModifyResponse: s.modifyResponse(cfg),
+		Transport:      s.retryTransport(),
+	}
 }
 
 func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
@@ -247,7 +270,7 @@ func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
 
 func (s *server) serveHeadlessResponse(w http.ResponseWriter, r *http.Request, cfg *endpointProxyConfig, templateInput map[string]any) {
 	// Evaluate status code using the single source of truth function
-	statusCode := s.evaluateStatusCode(cfg.Response.StatusCode, templateInput)
+	statusCode := s.evaluateStatusCode(r.Context(), cfg.Response.StatusCode, templateInput)
 
 	// Create a base http.Response which can be rendered and then used to respond to the request
 	res := &http.Response{
@@ -260,7 +283,7 @@ func (s *server) serveHeadlessResponse(w http.ResponseWriter, r *http.Request, c
 		Body:       io.NopCloser(bytes.NewReader([]byte{})),
 	}
 
-	if err := s.renderResponse(res, cfg, templateInput); err != nil {
+	if err := s.renderResponse(r.Context(), res, cfg, templateInput); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		fmt.Fprintln(w, err.Error())
 		return
@@ -337,9 +360,9 @@ func (s *server) getValueAtPath(data any, path string) (string, error) {
 	return strValue, nil
 }
 
-func (s *server) overrideRequestBody(req *http.Request, templateInput map[string]any, bodyOverride config.Body) error {
+func (s *server) overrideRequestBody(ctx context.Context, req *http.Request, templateInput map[string]any, bodyOverride config.Body) error {
 	// Use unified render to support both Template and Expr
-	renderedBodyBytes, err := s.renderer.Render(bodyOverride.Template, bodyOverride.Expr, templateInput, nil)
+	renderedBodyBytes, err := s.renderer.Render(ctx, bodyOverride.Template, bodyOverride.Expr, templateInput, nil)
 	if err != nil {
 		return err
 	}
@@ -367,7 +390,7 @@ func (s *server) overrideRequestBody(req *http.Request, templateInput map[string
 	return nil
 }
 
-func (s *server) overrideResponseBody(res *http.Response, templateInput map[string]any, bodyOverride config.Body) error {
+func (s *server) overrideResponseBody(ctx context.Context, res *http.Response, templateInput map[string]any, bodyOverride config.Body) error {
 	// Handle static text body first
 	if bodyOverride.Text != "" {
 		s.applyNewBodyToResponse(res, []byte(bodyOverride.Text))
@@ -375,7 +398,7 @@ func (s *server) overrideResponseBody(res *http.Response, templateInput map[stri
 	}
 
 	// Use unified render to support both Template and Expr
-	renderedBodyBytes, err := s.renderer.Render(bodyOverride.Template, bodyOverride.Expr, templateInput, nil)
+	renderedBodyBytes, err := s.renderer.Render(ctx, bodyOverride.Template, bodyOverride.Expr, templateInput, nil)
 	if err != nil {
 		return err
 	}

@@ -23,8 +23,11 @@ type server struct {
 	rateLimiter *rateLimitCoordinator
 }
 
+// New creates a config-driven proxy server.
 func New(options Options) Interface {
 	router := chi.NewRouter()
+	templateOptions := make([]template.Option, 0, len(options.TemplateOptions))
+	templateOptions = append(templateOptions, options.TemplateOptions...)
 
 	httpServer := &http.Server{
 		Addr:              fmt.Sprint(":", options.Port),
@@ -39,7 +42,7 @@ func New(options Options) Interface {
 		Options:     options,
 		router:      router,
 		httpServer:  httpServer,
-		renderer:    template.NewRenderer(options.Logger),
+		renderer:    template.NewRenderer(options.Logger, templateOptions...),
 		rateLimiter: newRateLimitCoordinator(),
 	}
 }
@@ -55,7 +58,7 @@ func (s *server) RunServer(ctx context.Context) {
 		})
 	})
 
-	combinedUriConfigs, err := s.combineCommonUriConfigs()
+	combinedUriConfigs, err := s.combineCommonUriConfigs(ctx)
 	if err != nil {
 		s.Logger.Fatal(err)
 	}
@@ -88,12 +91,12 @@ func (s *server) Shutdown(ctx context.Context) error {
 	return s.httpServer.Shutdown(ctx)
 }
 
-func (s *server) combineCommonUriConfigs() (map[string]map[string]*endpointProxyConfig, error) {
+func (s *server) combineCommonUriConfigs(ctx context.Context) (map[string]map[string]*endpointProxyConfig, error) {
 	combinedUriConfigs := make(map[string]map[string]*endpointProxyConfig)
 
 	for _, uriGroup := range s.UriGroups {
 		for _, supportedUri := range uriGroup.SupportedUris {
-			endpointProxyCfgMap, err := s.buildEndpointProxyConfigs(supportedUri)
+			endpointProxyCfgMap, err := s.buildEndpointProxyConfigs(ctx, supportedUri)
 			if err != nil {
 				return nil, err
 			}
@@ -119,10 +122,10 @@ func (s *server) combineCommonUriConfigs() (map[string]map[string]*endpointProxy
 	return combinedUriConfigs, nil
 }
 
-func (s *server) buildEndpointProxyConfigs(uriMap config.UriMap) (map[string]*endpointProxyConfig, error) {
+func (s *server) buildEndpointProxyConfigs(ctx context.Context, uriMap config.UriMap) (map[string]*endpointProxyConfig, error) {
 	endpointProxyConfigMap := make(map[string]*endpointProxyConfig)
 
-	baseEndpoint, err := s.getBaseEndpoint(uriMap)
+	baseEndpoint, err := s.getBaseEndpoint(ctx, uriMap)
 	if err != nil {
 		return nil, err
 	}
@@ -158,7 +161,7 @@ func (s *server) buildEndpointProxyConfigs(uriMap config.UriMap) (map[string]*en
 	return endpointProxyConfigMap, nil
 }
 
-func (s *server) getBaseEndpoint(uriMap config.UriMap) (string, error) {
+func (s *server) getBaseEndpoint(ctx context.Context, uriMap config.UriMap) (string, error) {
 	if uriMap.BaseEndpoint != "" {
 		return uriMap.BaseEndpoint, nil
 	}
@@ -167,7 +170,7 @@ func (s *server) getBaseEndpoint(uriMap config.UriMap) (string, error) {
 		"globalVars": s.Vars,
 	}
 
-	baseEndpointBytes, err := s.renderer.RenderExpr(s.BaseEndpoint, env, nil)
+	baseEndpointBytes, err := s.renderer.RenderExpr(ctx, s.BaseEndpoint, env, nil)
 
 	if err != nil {
 		return "", fmt.Errorf("failed to evaluate baseEndpoint expr: %w", err)

@@ -1,0 +1,65 @@
+baseEndpoint: |
+  "https://api.anthropic.com"
+
+uriGroups:
+  - name: Health Check
+    supportedUris:
+      - in: /health
+        description: Health check endpoint
+        out:
+          - method: GET
+
+  - name: Anthropic
+    supportedUris:
+      - in: /v1/messages
+        description: Messages endpoint
+        out:
+          - method: POST
+            text: /v1/messages
+
+overrides:
+  global:
+    request:
+      headers:
+        - op: remove
+        - op: add
+          name: Authorization
+          expr: '"Bearer " + anthropicAccessToken()'
+        - op: add
+          name: Content-Type
+          text: application/json
+        - op: add
+          name: Accept
+          text: application/json
+        - op: add
+          name: Anthropic-Version
+          text: 2023-06-01
+        - op: add
+          name: Anthropic-Beta
+          text: oauth-2025-04-20
+        - op: add
+          name: User-Agent
+          text: claude-cli/1.0.0
+        - op: add
+          name: X-App
+          text: cli
+  uris:
+    /health:
+      GET:
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              text: application/json
+          statusCode:
+            int: 200
+          body:
+            text: '{"status":"ok"}'
+
+    /v1/messages:
+      POST:
+        request:
+          headers:
+            - op: add
+              name: Accept-Encoding
+              text: identity
