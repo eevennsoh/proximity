@@ -14,6 +14,13 @@ import (
 //go:embed config.yaml
 var proxyConfig []byte
 
+const (
+	defaultPort          = 29574
+	gatewayTargetMain    = "main"
+	defaultGatewayTarget = gatewayTargetMain
+	gatewayTargetEval    = "eval"
+)
+
 // Command returns the ai-gateway subcommand
 func Command() *cli.Command {
 	return &cli.Command{
@@ -25,7 +32,7 @@ through AI-Gateway.`,
 			&cli.IntFlag{
 				Name:    "port",
 				Aliases: []string{"p"},
-				Value:   29574,
+				Value:   defaultPort,
 				Usage:   "Port to run the server on",
 			},
 			&cli.StringFlag{
@@ -33,6 +40,11 @@ through AI-Gateway.`,
 				Aliases: []string{"e"},
 				Value:   "staging",
 				Usage:   "AI-Gateway environment (staging, prod)",
+			},
+			&cli.StringFlag{
+				Name:  "gateway-target",
+				Value: defaultGatewayTarget,
+				Usage: "AI-Gateway target (main, eval)",
 			},
 			&cli.StringSliceFlag{
 				Name:  "profile",
@@ -76,9 +88,37 @@ func parseProfile(s string) (map[string]string, error) {
 	return profile, nil
 }
 
+func validateGatewayTarget(target string) error {
+	switch target {
+	case gatewayTargetMain, gatewayTargetEval:
+		return nil
+	default:
+		return fmt.Errorf("invalid --gateway-target %q: expected %q or %q", target, gatewayTargetMain, gatewayTargetEval)
+	}
+}
+
+func buildGlobalVars(env, gatewayTarget, defaultProfile string, useSlauthCommand bool, profiles []any) (map[string]any, error) {
+	if err := validateGatewayTarget(gatewayTarget); err != nil {
+		return nil, err
+	}
+
+	vars := make(map[string]any)
+	vars["aiGatewayEnv"] = env
+	vars["aiGatewayTarget"] = gatewayTarget
+	vars["profiles"] = profiles
+
+	if defaultProfile != "" {
+		vars["defaultProfile"] = defaultProfile
+	}
+
+	vars["useSlauthCommand"] = useSlauthCommand
+	return vars, nil
+}
+
 func run(c *cli.Context) error {
 	port := c.Int("port")
 	env := c.String("env")
+	gatewayTarget := c.String("gateway-target")
 	defaultProfile := c.String("default-profile")
 	useSlauthCommand := c.Bool("use-slauth-command")
 
@@ -99,21 +139,15 @@ func run(c *cli.Context) error {
 		profiles = append(profiles, profile)
 	}
 
+	vars, err := buildGlobalVars(env, gatewayTarget, defaultProfile, useSlauthCommand, profiles)
+	if err != nil {
+		return err
+	}
+
 	cfg, err := config.LoadFromBytes(proxyConfig)
 	if err != nil {
 		return fmt.Errorf("failed to parse embedded config: %w", err)
 	}
 
-	// Prepare global variables for the proxy
-	vars := make(map[string]any)
-
-	vars["aiGatewayEnv"] = env
-	vars["profiles"] = profiles
-
-	if defaultProfile != "" {
-		vars["defaultProfile"] = c.String("default-profile")
-	}
-
-	vars["useSlauthCommand"] = useSlauthCommand
 	return server.RunServer(cfg, port, vars)
 }
