@@ -1,5 +1,6 @@
 
 ### New Features
+- **AI Eval Gateway**: Added a selectable AI Gateway target for eval and offline workloads, routing requests to ai-eval-gateway with the matching SLAuth audience.
 - **Update Notifications**: A system notification is now sent on startup if a new version of Proximity is available.
 - **Dynamic Model Lists**: The /models endpoints now fetch live model data from the ML Platform service, returning only allowlisted models for your configured use-case.
 
