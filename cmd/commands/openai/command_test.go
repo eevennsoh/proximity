@@ -98,6 +98,20 @@ func TestServePortCanBeSetBeforeOrAfterServe(t *testing.T) {
 	}
 }
 
+// TestUnexpectedArgumentIsRejected verifies a mistyped subcommand fails loudly
+// instead of silently running the parent action and dropping later flags.
+func TestUnexpectedArgumentIsRejected(t *testing.T) {
+	app := cli.NewApp()
+	app.Writer = io.Discard
+	app.ErrWriter = io.Discard
+	app.Commands = []*cli.Command{Command()}
+
+	err := app.Run([]string{"proximity", "openai", "server", "--port", "8092"})
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `unexpected argument "server"`)
+}
+
 func TestDocCommandPrintsGeneratedEndpointReference(t *testing.T) {
 	var output bytes.Buffer
 

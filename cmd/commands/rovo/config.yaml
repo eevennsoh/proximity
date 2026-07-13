@@ -1,0 +1,355 @@
+# Proximity configuration for the Rovo proxy.
+#
+# Routes requests to api.atlassian.com/rovodev/v2/proxy/ai using Atlassian
+# OAuth (Bearer). Proximity mints and refreshes the access token via the
+# Atlassian device-code flow (proximity rovo login). The proxy strips our
+# auth header and injects its own ASAP token toward AI Gateway.
+#
+# Supported endpoints:
+#   POST /vertex/claude/v1/messages                                 — Claude via Vertex backend (CLI default)
+#   POST /bedrock/claude/v1/messages                                — Claude via Bedrock backend
+#   POST /openai/v1/chat/completions                                — OpenAI chat completions
+#   POST /openai/v1/responses                                       — OpenAI responses
+#   POST /google/gemini/v1beta/models/{model}:generateContent       — Gemini generateContent
+#   POST /google/gemini/v1beta/models/{model}:streamGenerateContent — Gemini streamed generateContent
+#   POST /google/gemini/v1/chat/completions                         — Gemini OpenAI-compatible chat completions
+#   GET  /health                                                    — health check
+
+baseEndpoint: |
+  let env = get(globalVars, "rovoEnv") ?? "prod";
+  env == "staging"
+    ? "https://api.stg.atlassian.com/rovodev/v2/proxy/ai"
+    : "https://api.atlassian.com/rovodev/v2/proxy/ai"
+
+uriGroups:
+
+  - name: Health Check
+    supportedUris:
+      - in: /health
+        description: Health check endpoint
+        out:
+          - method: GET
+
+  - name: Vertex Claude
+    supportedUris:
+      - in: /vertex/claude/v1/messages
+        description: Anthropic messages API via Vertex AI Gateway backend (CLI default)
+        out:
+          - method: OPTIONS
+          - method: POST
+            expr: |
+              "/v1/google/v1/publishers/anthropic/models/" + regexReplaceAll(body.model, ["-(\\d{8})(-v\\d+)$", "$2@$1", "-(\\d{8})$", "@$1"]) + ":" + ((get(body, "stream") ?? false) ? "streamRawPredict" : "rawPredict")
+
+  - name: Bedrock Claude
+    supportedUris:
+      - in: /bedrock/claude/v1/messages
+        description: Anthropic messages API via Bedrock AI Gateway backend
+        out:
+          - method: OPTIONS
+          - method: POST
+            expr: |
+              "/v1/bedrock/model/" + regexReplaceAll(body.model, ["^(claude-.+?-\\d{8})(-v\\d+)$", "anthropic.$1$2:0", "^(claude-.+?-\\d{8})$", "anthropic.$1-v1:0", "^(claude-.+?-\\d+-\\d+)(-v\\d+)$", "anthropic.$1$2", "^(claude-.+?-\\d+-\\d+)$", "anthropic.$1-v1"]) + "/invoke" + ((get(body, "stream") ?? false) ? "-with-response-stream" : "")
+
+  - name: OpenAI
+    supportedUris:
+      - in: /openai/v1/chat/completions
+        description: OpenAI chat completions
+        out:
+          - method: POST
+            text: /v1/openai/v1/chat/completions
+
+      - in: /openai/v1/responses
+        description: OpenAI responses
+        out:
+          - method: POST
+            text: /v1/openai/v1/responses
+
+  - name: Gemini
+    supportedUris:
+      - in: /google/gemini/v1beta/models/{model}:generateContent
+        description: Gemini generateContent
+        out:
+          - method: POST
+            expr: |
+              "/v1/google/v1/publishers/google/models/" + pathParams.model + ":generateContent"
+
+      - in: /google/gemini/v1beta/models/{model}:streamGenerateContent
+        description: Gemini streamed generateContent
+        out:
+          - method: POST
+            expr: |
+              "/v1/google/v1/publishers/google/models/" + pathParams.model + ":streamGenerateContent"
+
+      - in: /google/gemini/v1/chat/completions
+        description: Gemini OpenAI-compatible chat completions
+        out:
+          - method: POST
+            expr: |
+              /v1/google/publishers/google/v1/chat/completions
+
+overrides:
+  global:
+    request:
+      headers:
+        # Remove all incoming headers first (so Host is re-derived from URL)
+        - op: remove
+
+        - op: add
+          name: rovo-dev-cli-version
+          text: "202605.5.1"
+
+        - op: add
+          name: Content-Type
+          text: application/json
+
+        - op: add
+          name: Accept
+          text: application/json
+
+        - op: add
+          name: Authorization
+          expr: '"Bearer " + rovoAccessToken()'
+
+        - op: add
+          name: X-RovoDev-Billing-CloudId
+          expr: |
+            get(globalVars, "cloudID") ?? "a436116f-02ce-4520-8fbb-7301462a1674"
+
+        - op: add
+          name: X-RovoDev-Xid
+          text: rovodev-cli
+
+    response:
+      headers:
+        - op: remove
+        - op: add
+          name: Content-Type
+          text: application/json
+
+  uris:
+    /health:
+      GET:
+        response:
+          statusCode:
+            int: 200
+          body:
+            text: '{"status":"ok"}'
+
+    /bedrock/claude/v1/messages:
+      OPTIONS: &claude_options_response
+        response:
+          statusCode:
+            int: 200
+
+          headers:
+            - op: add
+              name: Access-Control-Allow-Origin
+              text: "*"
+            - op: add
+              name: Access-Control-Allow-Methods
+              text: POST, OPTIONS
+            - op: add
+              name: Access-Control-Allow-Headers
+              text: "*"
+            - op: add
+              name: Access-Control-Max-Age
+              text: "86400"
+
+
+      POST:
+        request:
+          headers:
+            # The bedrock api requires the anthropic version in the body rather
+            # than as a header like the anthropic api so the header needs to be
+            # removed.
+            - op: remove
+              name: anthropic-version
+
+            # No need for this when using AI-Gateway
+            - op: remove
+              name: x-api-key
+
+          body:
+            expr: |
+              toCompactJson(merge(filterOutKeys(body, ["model", "stream", "messages"]), {
+                anthropic_version: "bedrock-2023-05-31",
+                messages: map(body.messages, 
+                  type(#.content) == "string" 
+                    ? {
+                        role: #.role,
+                        content: [{
+                          type: "text",
+                          text: safeEncode(#.content)
+                        }]
+                      }
+                    : #
+                )
+              }))
+
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: headers["Content-Type"][0]
+            - op: add
+              name: Access-Control-Allow-Origin
+              text: "*"
+
+          body:
+            expr: |
+              event != nil ? (
+                let eventJson = trimPrefix(event ?? "", "data:") | trim();
+
+                len(eventJson) > 0 ? (
+                  let eventObj = fromJSON(eventJson);
+                  let eventLine = get(eventObj, "type") == "message_stop" ? toCompactJson({type: "message_stop"}) : eventJson;
+
+                  "event: " + get(eventObj, "type") + "\n" + "data: " + eventLine + "\n"
+                ) : "\n"
+              ) : (
+                toCompactJson(body)
+              )
+
+    /vertex/claude/v1/messages:
+      OPTIONS: *claude_options_response
+
+      POST:
+        request:
+          headers:
+            # The bedrock api requires the anthropic version in the body rather
+            # than as a header like the anthropic api so the header needs to be
+            # removed.
+            - op: remove
+              name: anthropic-version
+
+            # No need for this when using AI-Gateway
+            - op: remove
+              name: x-api-key
+
+          body:
+            expr: |
+              toCompactJson(merge(filterOutKeys(body, ["model", "stream", "messages"]), {
+                anthropic_version: "vertex-2023-10-16",
+                messages: map(body.messages, 
+                  type(#.content) == "string" 
+                    ? {
+                        role: #.role,
+                        content: [{
+                          type: "text",
+                          text: safeEncode(#.content)
+                        }]
+                      }
+                    : #
+                )
+              }))
+
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: headers["Content-Type"][0]
+            - op: add
+              name: Access-Control-Allow-Origin
+              text: "*"
+
+          body:
+            expr: |
+              event != nil ? (
+                let eventJson = trimPrefix(event ?? "", "data:") | trim();
+
+                len(eventJson) > 0 ? (
+                  let eventObj = fromJSON(eventJson);
+                  let eventLine = get(eventObj, "type") == "message_stop" ? toCompactJson({type: "message_stop"}) : eventJson;
+
+                  "event: " + get(eventObj, "type") + "\n" + "data: " + eventLine + "\n"
+                ) : "\n"
+              ) : (
+                toCompactJson(body)
+              )
+
+    /openai/v1/chat/completions:
+      POST:
+        request:
+          body:
+            expr: |
+              toCompactJson(merge(filterOutKeys(body, ["max_tokens"]),
+                get(body, "max_tokens") != nil ? { "max_completion_tokens": get(body, "max_tokens") } : {}
+              ))
+
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: headers["Content-Type"][0]
+
+          body:
+            expr: |
+              event != nil ? (
+                let eventJson = trimPrefix(event ?? "", "data:") | trim();
+
+                len(eventJson) > 0 ? ("data: " + eventJson + "\n") : "\n"
+              ) : (
+                toCompactJson(body)
+              )
+
+    /openai/v1/responses:
+      POST:
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: headers["Content-Type"][0]
+
+          body:
+            expr: |
+              event != nil ? (
+                let eventJson = trimPrefix(event ?? "", "data:") | trim();
+
+                len(eventJson) > 0 ? ("data: " + eventJson + "\n") : "\n"
+              ) : (
+                toCompactJson(body)
+              )
+
+    /google/gemini/v1beta/models/{model}:generateContent:
+      POST:
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: headers["Content-Type"][0]
+
+    /google/gemini/v1beta/models/{model}:streamGenerateContent:
+      POST:
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: headers["Content-Type"][0]
+
+          body:
+            expr: |
+              event != nil ? (
+                let eventJson = trimPrefix(event ?? "", "data:") | trim();
+
+                len(eventJson) > 0 ? ("data: " + eventJson + "\n") : "\n"
+              ) : (
+                toCompactJson(body)
+              )
+
+    /google/gemini/v1/chat/completions:
+      POST:
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: headers["Content-Type"][0]
+
+          body:
+            expr: |
+              event != nil ? (
+                let eventJson = trimPrefix(event ?? "", "data:") | trim();
+
+                len(eventJson) > 0 ? ("data: " + eventJson + "\n") : "\n"
+              ) : (
+                toCompactJson(body)
+              )
