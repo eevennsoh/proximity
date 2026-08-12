@@ -22,6 +22,13 @@ uriGroups:
           - method: POST
             text: /backend-api/codex/responses
 
+      - in: /v1/messages
+        description: Anthropic-compatible messages backed by OpenAI Responses
+        out:
+          - method: OPTIONS
+          - method: POST
+            text: /backend-api/codex/responses
+
 overrides:
   global:
     request:
@@ -92,7 +99,7 @@ overrides:
                 type(#) == "map" ? filterOutKeys(#, ["id"]) : #
               ) : inputItems;
 
-              toCompactJson(merge(filterOutKeys(body, ["instructions", "store", "stream", "input"]), input != nil ? {
+              toCompactJson(merge(filterOutKeys(body, ["instructions", "store", "stream", "input", "max_output_tokens"]), input != nil ? {
                 "input": statelessInput
               } : {}, {
                 "instructions": trim(get(body, "instructions") ?? "") != "" ? get(body, "instructions") : "You are a helpful assistant.",
@@ -106,3 +113,289 @@ overrides:
               expr: |
                 let contentType = getIndex(headers["Content-Type"], 0) ?? "";
                 trim(contentType) != "" ? contentType : "text/event-stream"
+
+    /v1/messages:
+      OPTIONS:
+        response:
+          statusCode:
+            int: 200
+          headers:
+            - op: add
+              name: Access-Control-Allow-Origin
+              text: "*"
+            - op: add
+              name: Access-Control-Allow-Methods
+              text: POST, OPTIONS
+            - op: add
+              name: Access-Control-Allow-Headers
+              text: "*"
+            - op: add
+              name: Access-Control-Max-Age
+              text: "86400"
+
+      POST:
+        request:
+          headers:
+            - op: remove
+              name: anthropic-version
+            - op: remove
+              name: x-api-key
+            - op: remove
+              name: Accept
+            - op: add
+              name: Accept
+              text: text/event-stream
+
+          body:
+            expr: |
+              let system = get(body, "system");
+              let systemBlocks = system != nil && type(system) == "array" ? system : [];
+              let instructions = system != nil && type(system) == "string"
+                ? system
+                : join(map(filter(systemBlocks, true ? get(#, "type") == "text" : false), true ? get(#, "text") ?? "" : ""), "\n");
+
+              let input = flatten(map(get(body, "messages") ?? [], true ? (
+                let role = get(#, "role");
+                let content = type(get(#, "content")) == "string"
+                  ? [{ type: "text", text: get(#, "content") }]
+                  : get(#, "content") ?? [];
+                let textBlocks = filter(content, true ? get(#, "type") == "text" : false);
+                let imageBlocks = filter(content, true ? get(#, "type") == "image" : false);
+                let toolUseBlocks = filter(content, true ? get(#, "type") == "tool_use" : false);
+                let toolResultBlocks = filter(content, true ? get(#, "type") == "tool_result" : false);
+                let messageContent = flatten([
+                  map(textBlocks, true ? {
+                    type: role == "assistant" ? "output_text" : "input_text",
+                    text: get(#, "text") ?? ""
+                  } : {}),
+                  map(imageBlocks, true ? (
+                    let source = get(#, "source") ?? {};
+                    {
+                      type: "input_image",
+                      image_url: get(source, "type") == "base64"
+                        ? "data:" + get(source, "media_type") + ";base64," + get(source, "data")
+                        : get(source, "url")
+                    }
+                  ) : {})
+                ]);
+                let messageItem = len(messageContent) > 0
+                  ? [{ type: "message", role: role == "system" ? "developer" : role, content: messageContent }]
+                  : [];
+                let functionCalls = map(toolUseBlocks, true ? {
+                  type: "function_call",
+                  call_id: get(#, "id"),
+                  name: get(#, "name"),
+                  arguments: toCompactJson(get(#, "input") ?? {})
+                } : {});
+                let functionOutputs = map(toolResultBlocks, true ? {
+                  type: "function_call_output",
+                  call_id: get(#, "tool_use_id"),
+                  output: type(get(#, "content")) == "string"
+                    ? get(#, "content")
+                    : join(map(get(#, "content") ?? [], true ? get(#, "text") ?? "" : ""), "\n")
+                } : {});
+                flatten([messageItem, functionCalls, functionOutputs])
+              ) : []));
+
+              let anthropicTools = get(body, "tools") ?? [];
+              let toolsObject = len(anthropicTools) > 0
+                ? {
+                    tools: map(anthropicTools, true ? {
+                      type: "function",
+                      name: get(#, "name"),
+                      description: get(#, "description") ?? "",
+                      parameters: get(#, "input_schema") ?? {}
+                    } : {})
+                  }
+                : {};
+              let anthropicToolChoice = get(body, "tool_choice");
+              let toolChoiceObject = anthropicToolChoice != nil
+                ? {
+                    tool_choice: get(anthropicToolChoice, "type") == "tool"
+                      ? { type: "function", name: get(anthropicToolChoice, "name") }
+                      : get(anthropicToolChoice, "type") == "any" ? "required" : "auto"
+                  }
+                : {};
+              let outputConfig = get(body, "output_config") ?? {};
+              let outputFormat = get(outputConfig, "format");
+              let textObject = outputFormat != nil && get(outputFormat, "type") == "json_schema"
+                ? {
+                    text: {
+                      format: {
+                        type: "json_schema",
+                        name: "response",
+                        strict: true,
+                        schema: get(outputFormat, "schema")
+                      }
+                    }
+                  }
+                : {};
+              let effort = get(outputConfig, "effort");
+              let reasoningObject = effort != nil ? { reasoning: { effort: effort } } : {};
+              let requestedModel = get(body, "model");
+              let openAiModel = len(regexFind("^claude-", requestedModel ?? "")) > 0
+                ? "gpt-5.6-luna"
+                : requestedModel;
+              let instructionsObject = len(instructions) > 0 ? { instructions: instructions } : {};
+              let temperatureObject = get(body, "temperature") != nil ? { temperature: get(body, "temperature") } : {};
+              let topPObject = get(body, "top_p") != nil ? { top_p: get(body, "top_p") } : {};
+
+              toCompactJson(merge(
+                {
+                  model: openAiModel,
+                  input: input,
+                  stream: true
+                },
+                instructionsObject,
+                toolsObject,
+                toolChoiceObject,
+                textObject,
+                reasoningObject,
+                temperatureObject,
+                topPObject,
+                {
+                  store: false
+                }
+              ))
+
+        response:
+          headers:
+            - op: add
+              name: Content-Type
+              expr: getIndex(headers["Content-Type"], 0) ?? "text/event-stream"
+            - op: add
+              name: Access-Control-Allow-Origin
+              text: "*"
+
+          body:
+            expr: |
+              event != nil ? (
+                let eventLine = event ?? "";
+                let isDataLine = len(regexFind("^(data:)", eventLine)) > 0;
+                let eventJson = trimPrefix(eventLine, "data:") | trim();
+
+                !isDataLine ? "" : len(eventJson) == 0 || eventJson == "[DONE]" ? "\n" : (
+                  let e = fromJSON(eventJson);
+                  let eventType = get(e, "type") ?? "";
+                  let response = get(e, "response") ?? {};
+                  let item = get(e, "item") ?? {};
+                  let outputIndex = get(e, "output_index") ?? 0;
+
+                  eventType == "response.created" ? (
+                    setToStorage("message_id", get(response, "id") ?? "");
+                    setToStorage("model", get(response, "model") ?? "");
+                    setToStorage("next_block", "0");
+                    setToStorage("tool_count", "0");
+                    "event: message_start\n" + "data: " + toCompactJson({
+                      type: "message_start",
+                      message: {
+                        id: get(response, "id"),
+                        type: "message",
+                        role: "assistant",
+                        content: [],
+                        model: get(response, "model"),
+                        stop_reason: nil,
+                        stop_sequence: nil,
+                        usage: { input_tokens: 0, output_tokens: 0 }
+                      }
+                    }) + "\n\n"
+                  ) : eventType == "response.content_part.added" ? (
+                    let part = get(e, "part") ?? {};
+                    get(part, "type") == "output_text" ? (
+                      let blockIndex = fromJSON(getFromStorage("next_block") ?? "0");
+                      setToStorage("text_block_" + string(outputIndex), string(blockIndex));
+                      setToStorage("next_block", string(blockIndex + 1));
+                      "event: content_block_start\n" + "data: " + toCompactJson({
+                        type: "content_block_start",
+                        index: blockIndex,
+                        content_block: { type: "text", text: "" }
+                      }) + "\n\n"
+                    ) : ""
+                  ) : eventType == "response.output_text.delta" ? (
+                    "event: content_block_delta\n" + "data: " + toCompactJson({
+                      type: "content_block_delta",
+                      index: fromJSON(getFromStorage("text_block_" + string(outputIndex)) ?? "0"),
+                      delta: { type: "text_delta", text: get(e, "delta") ?? "" }
+                    }) + "\n\n"
+                  ) : eventType == "response.content_part.done" ? (
+                    "event: content_block_stop\n" + "data: " + toCompactJson({
+                      type: "content_block_stop",
+                      index: fromJSON(getFromStorage("text_block_" + string(outputIndex)) ?? "0")
+                    }) + "\n\n"
+                  ) : eventType == "response.output_item.added" && get(item, "type") == "function_call" ? (
+                    let blockIndex = fromJSON(getFromStorage("next_block") ?? "0");
+                    setToStorage("tool_block_" + string(outputIndex), string(blockIndex));
+                    setToStorage("next_block", string(blockIndex + 1));
+                    setToStorage("tool_count", string(fromJSON(getFromStorage("tool_count") ?? "0") + 1));
+                    "event: content_block_start\n" + "data: " + toCompactJson({
+                      type: "content_block_start",
+                      index: blockIndex,
+                      content_block: {
+                        type: "tool_use",
+                        id: get(item, "call_id"),
+                        name: get(item, "name"),
+                        input: {}
+                      }
+                    }) + "\n\n"
+                  ) : eventType == "response.function_call_arguments.delta" ? (
+                    "event: content_block_delta\n" + "data: " + toCompactJson({
+                      type: "content_block_delta",
+                      index: fromJSON(getFromStorage("tool_block_" + string(outputIndex)) ?? "0"),
+                      delta: { type: "input_json_delta", partial_json: get(e, "delta") ?? "" }
+                    }) + "\n\n"
+                  ) : eventType == "response.output_item.done" && get(item, "type") == "function_call" ? (
+                    "event: content_block_stop\n" + "data: " + toCompactJson({
+                      type: "content_block_stop",
+                      index: fromJSON(getFromStorage("tool_block_" + string(outputIndex)) ?? "0")
+                    }) + "\n\n"
+                  ) : eventType == "response.completed" ? (
+                    let usage = get(response, "usage") ?? {};
+                    let stopReason = fromJSON(getFromStorage("tool_count") ?? "0") > 0
+                      ? "tool_use"
+                      : get(response, "status") == "incomplete" ? "max_tokens" : "end_turn";
+                    "event: message_delta\n" + "data: " + toCompactJson({
+                      type: "message_delta",
+                      delta: { stop_reason: stopReason, stop_sequence: nil },
+                      usage: { output_tokens: get(usage, "output_tokens") ?? 0 }
+                    }) + "\n\n" +
+                    "event: message_stop\n" + "data: " + toCompactJson({ type: "message_stop" }) + "\n\n"
+                  ) : ""
+                )
+              ) : (
+                let response = body ?? {};
+                let output = get(response, "output") ?? [];
+                let messageItems = filter(output, true ? get(#, "type") == "message" : false);
+                let functionCalls = filter(output, true ? get(#, "type") == "function_call" : false);
+                let textBlocks = flatten(map(messageItems, true ? (
+                  map(filter(get(#, "content") ?? [], true ? get(#, "type") == "output_text" : false), true ? {
+                    type: "text",
+                    text: get(#, "text") ?? ""
+                  } : {})
+                ) : []));
+                let toolBlocks = map(functionCalls, true ? (
+                  let arguments = get(#, "arguments") ?? "";
+                  {
+                    type: "tool_use",
+                    id: get(#, "call_id"),
+                    name: get(#, "name"),
+                    input: len(arguments) > 0 ? fromJSON(arguments) : {}
+                  }
+                ) : {});
+                let usage = get(response, "usage") ?? {};
+                let stopReason = len(toolBlocks) > 0
+                  ? "tool_use"
+                  : get(response, "status") == "incomplete" ? "max_tokens" : "end_turn";
+                toCompactJson({
+                  id: get(response, "id"),
+                  type: "message",
+                  role: "assistant",
+                  content: flatten([textBlocks, toolBlocks]),
+                  model: get(response, "model"),
+                  stop_reason: stopReason,
+                  stop_sequence: nil,
+                  usage: {
+                    input_tokens: get(usage, "input_tokens") ?? 0,
+                    output_tokens: get(usage, "output_tokens") ?? 0
+                  }
+                })
+              )

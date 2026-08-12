@@ -220,7 +220,7 @@ func TestOpenaiResponsesNormalizesStringInputEndToEnd(t *testing.T) {
 
 	baseUrl := startOpenaiProxy(t, upstream.URL, authService)
 
-	requestBody := strings.NewReader(`{"model":"gpt-5.5","input":"hello","instructions":"","store":true,"stream":false}`)
+	requestBody := strings.NewReader(`{"model":"gpt-5.5","input":"hello","instructions":"","max_output_tokens":1024,"store":true,"stream":false}`)
 	request, err := http.NewRequestWithContext(context.Background(), http.MethodPost, baseUrl+"/v1/responses", requestBody)
 	require.NoError(t, err)
 	request.Header.Set("Content-Type", "application/json")
@@ -240,6 +240,7 @@ func TestOpenaiResponsesNormalizesStringInputEndToEnd(t *testing.T) {
 	assert.Equal(t, "You are a helpful assistant.", upstreamBody["instructions"])
 	assert.Equal(t, false, upstreamBody["store"])
 	assert.Equal(t, true, upstreamBody["stream"])
+	assert.NotContains(t, upstreamBody, "max_output_tokens")
 	inputItems, ok := upstreamBody["input"].([]any)
 	require.True(t, ok)
 	require.Len(t, inputItems, 1)
