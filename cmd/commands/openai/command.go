@@ -32,11 +32,6 @@ func Command() *cli.Command {
 		Description: "Run an OpenAI-compatible local proxy backed by ChatGPT OAuth credentials.",
 		Flags: []cli.Flag{
 			portFlag(),
-			&cli.StringFlag{
-				Name:    "credentials-file",
-				Usage:   "Path to the OpenAI credential file",
-				EnvVars: []string{"PROXIMITY_OPENAI_CREDENTIALS_FILE"},
-			},
 		},
 		Action: run,
 		Subcommands: []*cli.Command{
@@ -102,21 +97,21 @@ func logoutCommand() *cli.Command {
 	}
 }
 
-// newAuth creates the OpenAI auth service configured by CLI flags.
-func newAuth(c *cli.Context) (auth.Interface, error) {
-	options := make([]auth.Option, 0, 2)
+// newAuth creates the OpenAI auth service.
+func newAuth() (auth.Interface, error) {
+	options := make([]auth.Option, 0, 1)
 	options = append(options, auth.WithBrowserOpener(browser.OpenURL))
-
-	if credentialPath := c.String("credentials-file"); credentialPath != "" {
-		options = append(options, auth.WithCredentialPath(credentialPath))
-	}
 
 	return auth.New(options...)
 }
 
 // run starts the OpenAI-compatible proxy using ChatGPT OAuth credentials.
 func run(c *cli.Context) error {
-	authService, err := newAuth(c)
+	if err := rejectUnexpectedArgs(c); err != nil {
+		return err
+	}
+
+	authService, err := newAuth()
 	if err != nil {
 		return err
 	}
@@ -132,6 +127,17 @@ func run(c *cli.Context) error {
 		Vars:            make(map[string]any),
 		TemplateOptions: openaiTemplateOptions(authService),
 	})
+}
+
+// rejectUnexpectedArgs fails when positional arguments are passed, since a stray
+// argument such as a mistyped subcommand causes the standard flag parser to stop
+// reading flags, silently dropping anything after it (for example --port).
+func rejectUnexpectedArgs(c *cli.Context) error {
+	if c.NArg() == 0 {
+		return nil
+	}
+
+	return fmt.Errorf("unexpected argument %q\n\nRun 'proximity openai --help' for available subcommands (serve, login, status, logout)", c.Args().First())
 }
 
 // commandPort returns the explicitly selected proxy port or the default.
@@ -158,7 +164,7 @@ func contextHasLocalPortFlag(c *cli.Context) bool {
 
 // login stores ChatGPT OAuth credentials using browser or device login.
 func login(c *cli.Context) error {
-	authService, err := newAuth(c)
+	authService, err := newAuth()
 	if err != nil {
 		return err
 	}
@@ -172,7 +178,7 @@ func login(c *cli.Context) error {
 
 // status writes credential status without exposing token values.
 func status(c *cli.Context) error {
-	authService, err := newAuth(c)
+	authService, err := newAuth()
 	if err != nil {
 		return err
 	}
@@ -215,7 +221,7 @@ func status(c *cli.Context) error {
 
 // logout removes stored ChatGPT OAuth credentials.
 func logout(c *cli.Context) error {
-	authService, err := newAuth(c)
+	authService, err := newAuth()
 	if err != nil {
 		return err
 	}

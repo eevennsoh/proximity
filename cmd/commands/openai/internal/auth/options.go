@@ -28,13 +28,6 @@ type options struct {
 // Option configures the OpenAI auth service.
 type Option func(*options)
 
-// WithCredentialPath overrides the default credential file path.
-func WithCredentialPath(path string) Option {
-	return func(options *options) {
-		options.credentialPath = path
-	}
-}
-
 // WithHttpClient overrides the HTTP client used for OAuth requests.
 func WithHttpClient(client httpClient) Option {
 	return func(options *options) {

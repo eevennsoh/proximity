@@ -8,6 +8,7 @@ import (
 	aigateway "bitbucket.org/atlassian-developers/proximity/cmd/commands/ai-gateway"
 	anthropic "bitbucket.org/atlassian-developers/proximity/cmd/commands/anthropic"
 	openai "bitbucket.org/atlassian-developers/proximity/cmd/commands/openai"
+	rovo "bitbucket.org/atlassian-developers/proximity/cmd/commands/rovo"
 	"bitbucket.org/atlassian-developers/proximity/internal/config"
 	"bitbucket.org/atlassian-developers/proximity/internal/server"
 
@@ -72,6 +73,7 @@ based on a YAML configuration file.`,
 			aigateway.Command(),
 			anthropic.Command(),
 			openai.Command(),
+			rovo.Command(),
 		},
 	}
 

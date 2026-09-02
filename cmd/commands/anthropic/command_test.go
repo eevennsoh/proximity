@@ -90,6 +90,22 @@ func TestServePortCanBeSetBeforeOrAfterServe(t *testing.T) {
 	}
 }
 
+// TestUnexpectedArgumentIsRejected verifies a mistyped subcommand fails loudly
+// instead of silently running the parent action and dropping later flags.
+func TestUnexpectedArgumentIsRejected(t *testing.T) {
+	cmd := Command()
+
+	app := cli.NewApp()
+	app.Writer = io.Discard
+	app.ErrWriter = io.Discard
+	app.Commands = []*cli.Command{cmd}
+
+	err := app.Run([]string{"proximity", "anthropic", "server", "--port", "8092"})
+
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `unexpected argument "server"`)
+}
+
 // TestConfigDefinesAnthropicMessagesEndpoint verifies the embedded config targets Anthropic APIs.
 func TestConfigDefinesAnthropicMessagesEndpoint(t *testing.T) {
 	cfg, err := config.LoadFromBytes(proxyConfig)

@@ -252,6 +252,7 @@ autoStartProxy = true
 
 [vars]
 aiGatewayEnv = "prod"
+aiGatewayTarget = "main"
 defaultProfile = "default"
 
 [[vars.profiles]]
@@ -273,9 +274,18 @@ adGroup = "project-a-ad-group"
 |--------|------|-------------|
 | `autoStartProxy` | boolean | Automatically start the proxy when the app launches |
 | `vars.aiGatewayEnv` | string | AI-Gateway environment: `"staging"` or `"prod"` |
+| `vars.aiGatewayTarget` | string | AI-Gateway target: `"main"` or `"eval"` |
 | `vars.defaultProfile` | string | Default profile name to use |
 | `vars.atlassianCloudId` | string | Override Atlassian Cloud ID |
 | `vars.profiles` | array | List of named authentication profiles |
+
+Set `vars.aiGatewayTarget = "eval"` for eval, offline inference, and batch workloads. This routes traffic to `ai-eval-gateway` and requests SLAuth tokens with the `ai-eval-gateway` audience. If unset, Proximity keeps using the main AI Gateway.
+
+For the Atlas CLI plugin command, use:
+
+```bash
+proximity ai-gateway --gateway-target eval --env prod --profile 'name=default;useCaseId=your-use-case-id;adGroup=your-ad-group'
+```
 
 ### Profile Configuration
 
@@ -301,7 +311,11 @@ Proximity uses `config.yaml` for route definitions and request/response transfor
 
 ```yaml
 baseEndpoint: |
-  "https://ai-gateway.us-east-1." + get(settings, "aiGatewayEnv") ?? "staging" + ".atl-paas.net"
+  let aiGatewayEnv = get(globalVars, "aiGatewayEnv") ?? "staging";
+  let aiGatewayTarget = get(globalVars, "aiGatewayTarget") ?? "main";
+  aiGatewayTarget == "eval"
+    ? "https://ai-eval-gateway.sgw." + aiGatewayEnv + ".atl-paas.net"
+    : "https://ai-gateway.us-east-1." + aiGatewayEnv + ".atl-paas.net"
 
 uriGroups:
   - name: OpenAI

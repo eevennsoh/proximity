@@ -1,6 +1,10 @@
 
 baseEndpoint: |
-  "https://ai-gateway.us-east-1." + get(globalVars, "aiGatewayEnv") ?? "staging" + ".atl-paas.net"
+  let aiGatewayEnv = get(globalVars, "aiGatewayEnv") ?? "staging";
+  let aiGatewayTarget = get(globalVars, "aiGatewayTarget") ?? "main";
+  aiGatewayTarget == "eval"
+    ? "https://ai-eval-gateway.sgw." + aiGatewayEnv + ".atl-paas.net"
+    : "https://ai-gateway.us-east-1." + aiGatewayEnv + ".atl-paas.net"
 
 uriGroups:
 
@@ -119,11 +123,13 @@ overrides:
             let adGroup = get(profile, "adGroup");
             let adGroupList = adGroup != nil ? [adGroup] : [];
             let aiGatewayEnv = get(globalVars, "aiGatewayEnv") ?? "staging";
+            let aiGatewayTarget = get(globalVars, "aiGatewayTarget") ?? "main";
+            let aiGatewayAudience = aiGatewayTarget == "eval" ? "ai-eval-gateway" : "ai-gateway";
             let useSlauthCommand = get(globalVars, "useSlauthCommand");
 
             "slauth " + (useSlauthCommand
-              ? slauthtokenWithCommand(adGroupList, "ai-gateway", aiGatewayEnv)
-              : slauthtoken(adGroupList, "ai-gateway", aiGatewayEnv))
+              ? slauthtokenWithCommand(adGroupList, aiGatewayAudience, aiGatewayEnv)
+              : slauthtoken(adGroupList, aiGatewayAudience, aiGatewayEnv))
 
     response:
       headers:
