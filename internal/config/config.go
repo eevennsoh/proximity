@@ -59,8 +59,9 @@ type StatusCodeInput struct {
 }
 
 type OutMethod struct {
-	Method string `yaml:"method" json:"method"`
-	Input  `yaml:",inline"`
+	Method   string `yaml:"method" json:"method"`
+	Protocol string `yaml:"protocol,omitempty" json:"-"`
+	Input    `yaml:",inline"`
 }
 
 type Overrides struct {

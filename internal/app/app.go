@@ -10,6 +10,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"bitbucket.org/atlassian-developers/proximity/internal/config"
 	"bitbucket.org/atlassian-developers/proximity/internal/proxy"
@@ -34,6 +35,7 @@ type App struct {
 
 	settingsPath string
 	settings     *settings.Struct
+	profileState atomic.Value
 
 	version   string
 	changelog string
@@ -65,6 +67,7 @@ func (a *App) Startup(ctx context.Context) {
 		log.Printf("Failed to read settings: %v", err)
 		return
 	}
+	a.initProfiles()
 
 	a.config, err = config.ReadConfig(a.configPath)
 	if err != nil {
@@ -98,12 +101,13 @@ func (a *App) StartProxy() error {
 	logger := log.New(pw, "", log.LstdFlags)
 
 	a.proxy = proxy.New(proxy.Options{
-		Port:     a.port,
-		TestMode: false,
-		Logger:   logger,
-		Config:   a.config,
-		Vars:     a.settings.Vars,
-		Version:  a.version,
+		Port:           a.port,
+		TestMode:       false,
+		Logger:         logger,
+		Config:         a.config,
+		Vars:           a.settings.Vars,
+		DefaultProfile: a.selectedProfile,
+		Version:        a.version,
 	})
 
 	a.running = true

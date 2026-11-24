@@ -137,6 +137,11 @@ func (s *server) buildEndpointProxyConfigs(ctx context.Context, uriMap config.Ur
 
 	for _, outMethod := range uriMap.Out {
 		httpMethod := outMethod.Method
+		switch outMethod.Protocol {
+		case "", openResponses, openAIResponses, claudeMessages:
+		default:
+			return nil, fmt.Errorf("route %s %s: unknown protocol %q", httpMethod, uriMap.In, outMethod.Protocol)
+		}
 
 		endpointProxyCfg := &endpointProxyConfig{
 			baseEndpoint:    target,
