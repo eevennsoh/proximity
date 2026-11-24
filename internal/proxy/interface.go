@@ -19,7 +19,8 @@ type Options struct {
 	*config.Config
 
 	// Generic global variables provided to the config for rendering
-	Vars map[string]any
+	Vars           map[string]any
+	DefaultProfile func() string
 }
 
 type Interface interface {

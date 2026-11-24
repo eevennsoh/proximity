@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -31,6 +32,10 @@ type endpointProxyConfig struct {
 
 func (s *server) modifyResponse(cfg *endpointProxyConfig) modifyResponseFn {
 	return func(res *http.Response) error {
+		if cfg.Out.Protocol != "" {
+			return s.modifyResponsesV2(res, cfg.Out.Protocol)
+		}
+
 		ctx := context.Background()
 		contentType := res.Header.Get("Content-Type")
 
@@ -147,6 +152,10 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 		// Build the template variable map to use the render everything
 		templateInput, err := s.buildTemplateInputFromRequest(r)
 		if err != nil {
+			if cfg.Out.Protocol != "" {
+				writeResponsesRequestError(w, cfg.Out.Protocol, fmt.Errorf("could not read request body"))
+				return
+			}
 			s.writeRequestError(w, "failed to build proxy request", err)
 			return
 		}
@@ -174,9 +183,22 @@ func (s *server) handleEndpoint(cfg *endpointProxyConfig) http.HandlerFunc {
 			return
 		}
 
+		var protocolHeaders http.Header
+		if cfg.Out.Protocol != "" {
+			protocolHeaders, err = s.prepareResponsesV2(r, cfg.Out.Protocol)
+			if err != nil {
+				writeResponsesRequestError(w, cfg.Out.Protocol, err)
+				return
+			}
+		}
+
 		if err := s.renderRequest(r.Context(), r, cfg, templateInput); err != nil {
 			s.writeRequestError(w, "failed to render proxy request", err)
 			return
+		}
+
+		for key, values := range protocolHeaders {
+			r.Header[key] = values
 		}
 
 		if err := s.prepareReplayableRequest(r); err != nil {
@@ -231,7 +253,7 @@ func (s *server) handleForward(w http.ResponseWriter, r *http.Request, fwd *conf
 // endpointProxy creates the outbound reverse proxy for a configured endpoint.
 // Forwarded proxy metadata is purged so upstream APIs receive direct-client requests.
 func (s *server) endpointProxy(cfg *endpointProxyConfig) *httputil.ReverseProxy {
-	return &httputil.ReverseProxy{
+	proxy := &httputil.ReverseProxy{
 		Rewrite: func(proxyRequest *httputil.ProxyRequest) {
 			proxyRequest.SetURL(cfg.baseEndpoint)
 			proxyRequest.Out.Host = cfg.baseEndpoint.Host
@@ -239,6 +261,13 @@ func (s *server) endpointProxy(cfg *endpointProxyConfig) *httputil.ReverseProxy 
 		ModifyResponse: s.modifyResponse(cfg),
 		Transport:      s.retryTransport(),
 	}
+	if cfg.Out.Protocol == claudeMessages || cfg.Out.Protocol == openAIResponses {
+		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+			s.Logger.Printf("AI Gateway v2 proxy error: %v", err)
+			writeResponsesError(w, cfg.Out.Protocol, http.StatusBadGateway, "AI Gateway request failed")
+		}
+	}
+	return proxy
 }
 
 func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
@@ -435,11 +464,16 @@ func (s *server) buildTemplateInputFromRequest(req *http.Request) (map[string]an
 		pathParamsMap[key] = pathParams.Values[i]
 	}
 
+	vars := s.Vars
+	if s.DefaultProfile != nil {
+		vars = maps.Clone(s.Vars)
+		vars["defaultProfile"] = s.DefaultProfile()
+	}
 	templateInput := map[string]any{
 		"path":       req.URL.Path,
 		"pathParams": pathParamsMap,
 		"headers":    copyHeaders(req.Header),
-		"globalVars": s.Vars,
+		"globalVars": vars,
 		"version":    s.Version,
 	}
 

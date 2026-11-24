@@ -17,6 +17,30 @@ uriGroups:
           - method: POST
           - method: OPTIONS
 
+  - name: AI Gateway v2
+    supportedUris:
+      - in: /v2/responses
+        description: Native Open Responses endpoint
+        out:
+          - method: POST
+            text: /v2/responses
+            protocol: open-responses
+
+      - in: /openai-v2/v1/responses
+        description: OpenAI Responses compatibility
+        out:
+          - method: POST
+            text: /v2/responses
+            protocol: openai-responses
+
+      - in: /claude-v2/v1/messages
+        description: Claude Messages compatibility
+        out:
+          - method: OPTIONS
+          - method: POST
+            text: /v2/responses
+            protocol: claude-messages
+
   - name: OpenAI
     supportedUris:
       - in: /openai/v1/chat/completions
@@ -571,6 +595,9 @@ overrides:
                 toCompactJson(body)
               )
 
+
+    /claude-v2/v1/messages:
+      OPTIONS: *claude_options_response
 
     /vertex/claude/models: &vertex_models_route
       GET:

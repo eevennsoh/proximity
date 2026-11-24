@@ -70,6 +70,9 @@ export default function App() {
   const [showCopiedToast, setShowCopiedToast] = useState(false);
   const [showChangelog, setShowChangelog] = useState(false);
   const [changelogData, setChangelogData] = useState({ version: '', changelog: '' });
+  const [profiles, setProfiles] = useState({ selected: "", profiles: [] });
+  const [profileError, setProfileError] = useState("");
+  const [profilePending, setProfilePending] = useState(false);
 
   // Dark theme only
   const logsRef = useRef(null);
@@ -110,6 +113,10 @@ export default function App() {
         if (API?.GetPort) {
           const p = await API.GetPort();
           if (mounted) setPort(p);
+        }
+        if (API?.GetProfileSettings) {
+          const settings = await API.GetProfileSettings();
+          if (mounted && settings) setProfiles(settings);
         }
         // Fetch changelog and show it on startup (only for unseen versions)
         if (API?.GetChangelog) {
@@ -183,6 +190,21 @@ export default function App() {
       return;
     }
     await API.ClearLogs();
+  };
+
+  const onProfileChange = async (event) => {
+    const selected = event.target.value;
+    if (!API?.SetDefaultProfile || selected === profiles.selected) return;
+    setProfilePending(true);
+    setProfileError("");
+    try {
+      await API.SetDefaultProfile(selected);
+      setProfiles((current) => ({ ...current, selected }));
+    } catch (error) {
+      setProfileError(`Could not change profile: ${error}`);
+    } finally {
+      setProfilePending(false);
+    }
   };
 
   const copyToClipboard = async (text) => {
@@ -321,6 +343,22 @@ export default function App() {
 
       <main className="flex-1 overflow-hidden min-h-0 min-w-0 p-1">
         <div className="shadow-md bg-neutral-100/60 dark:bg-neutral-900 p-0 h-full min-h-0 min-w-0 w-full flex flex-col overflow-hidden rounded-lg">
+          {profiles.profiles.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-white/10 px-4 py-2.5">
+              <label htmlFor="active-profile" className="text-sm font-medium text-slate-200">Active profile</label>
+              <select id="active-profile" value={profiles.selected} onChange={onProfileChange} disabled={profilePending}
+                className="min-w-0 max-w-full rounded-md border border-white/15 bg-neutral-800 px-2 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-60">
+                {profiles.profiles.map((profile) => (
+                  <option key={profile.name} value={profile.name}>{profile.name}{profile.useCaseId ? ` · ${profile.useCaseId}` : ""}</option>
+                ))}
+              </select>
+              <span className="text-xs text-slate-400">Applies to new requests. Explicit profile routes still take priority.</span>
+              {profiles.profiles.find((profile) => profile.name === profiles.selected)?.useCaseId === "ai-gateway-eval-use-case" && (
+                <span className="w-full text-xs text-slate-400">Shared evaluation is staging-only and subject to experimentation data restrictions.</span>
+              )}
+              {profileError && <span role="alert" className="w-full text-xs text-red-400">{profileError}</span>}
+            </div>
+          )}
           <div
             ref={logsRef}
             className="flex-1 min-h-0 min-w-0 overflow-auto no-scrollbar"

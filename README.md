@@ -61,6 +61,40 @@ make package
 
 The proxy runs on port `29576` (or `29575` for development) and provides multiple endpoints to mimic different LLM providers.
 
+### AI Gateway v2
+
+The desktop app and `proximity ai-gateway` expose these routes. Select a v2 route explicitly when migrating a client. For the CLI, substitute its default port `29574` in the examples.
+
+| Client protocol | POST endpoint | SDK or CLI base URL |
+| --- | --- | --- |
+| Open Responses | `/v2/responses` | Use the endpoint directly |
+| OpenAI Responses | `/openai-v2/v1/responses` | `http://localhost:29576/openai-v2/v1` |
+| Claude Messages | `/claude-v2/v1/messages` | `http://localhost:29576/claude-v2` |
+
+The native route forwards Open Responses JSON and SSE. Send a model allowed by your profile and set `"stream": true` for SSE.
+
+```bash
+curl -N http://localhost:29576/v2/responses \
+  -H "Content-Type: application/json" \
+  -d '{"model":"claude-sonnet-4-6","input":"Reply with ready.","stream":true}'
+```
+
+OpenAI SDK clients can use the compatibility base URL and a local placeholder API key. This route resolves Proximity's existing short GPT model aliases to their dated IDs. Send complete input history, including function outputs and reasoning items, with `store: false`. Gateway v2 rejects stored responses, background mode, and continuation by response or conversation ID. Use HTTP POST for SDK requests. Gateway v2 drops `text.verbosity` and some provider-native streaming events.
+
+Claude Code uses its existing Messages API format. Set the base URL and pass an allowed model when checking the route.
+
+```bash
+ANTHROPIC_BASE_URL=http://localhost:29576/claude-v2 \
+  ANTHROPIC_API_KEY=proximity-local \
+  claude --model claude-sonnet-4-6
+```
+
+The Claude route translates text, tool calls and results, and signed or redacted reasoning through the Messages transcript. The gateway maps legacy thinking budgets to effort tiers. Messages token counting and batch operations have no v2 proxy route. The adapter omits `top_k`, custom stop sequences, and `context_management`.
+
+All three routes use the configured profile, SLAuth audience, and Cloud ID. Select another configured profile with the usual `/p/{profile}` prefix or `X-Proximity-Profile` header. Clients can replay `X-Atlassian-Session-Context` from a response to request model and vendor affinity. Dummy Cloud ID eligibility is decided by the gateway and the use case's tenancy configuration.
+
+See the [v2 API contract](https://hello.atlassian.net/wiki/spaces/agd/pages/7597393489/AI+Gateway+API+Contract+V2), [OpenAI migration guide](https://hello.atlassian.net/wiki/spaces/agd/pages/7597157425/Migrate+from+OpenAI+Responses+API+to+v2+responses), and [Vertex Claude migration guide](https://hello.atlassian.net/wiki/spaces/agd/pages/7597393419/Migrate+from+Vertex+AI+Claude+to+v2+responses).
+
 ### OpenAI Endpoints
 
 Drop-in replacement for OpenAI's APIs.
@@ -216,6 +250,8 @@ curl -X POST "http://localhost:29576/google/gemini/v1beta/models/gemini-2.5-pro:
 ### Multiple Use-Cases via Profiles
 
 Proximity supports multiple simultaneous use-cases through profiles. Each profile can have its own Atlassian Cloud ID, use case ID, and AD group for authentication. This allows you to route requests to AI-Gateway with different auth configurations without restarting the proxy.
+
+In the desktop app, use **Active profile** to choose the default for new requests. The selection is remembered separately from your settings file. Explicit `/p/{profile}` routes and `X-Proximity-Profile` headers override the selection. In staging, the app also offers a shared evaluation profile; use it only for permitted experimentation data.
 
 > **Note:** If you only have a single profile defined, you don't need to use the `/p/{profile}/...` URL prefix or `X-Proximity-Profile` header. The default routes (e.g., `/openai/v1/chat/completions`) will automatically use your single profile.
 
