@@ -23,6 +23,7 @@ import (
 type App struct {
 	ctx     context.Context
 	mu      sync.Mutex
+	logsMu  sync.Mutex
 	running bool
 	logs    bytes.Buffer
 
@@ -95,7 +96,9 @@ func (a *App) StartProxy() error {
 		return errors.New("proxy already running")
 	}
 
+	a.logsMu.Lock()
 	a.logs.Reset()
+	a.logsMu.Unlock()
 
 	// Create a pipe and a logger that writes to it so we can stream proxy logs to the UI
 	pr, pw := io.Pipe()
@@ -113,7 +116,7 @@ func (a *App) StartProxy() error {
 	})
 
 	a.running = true
-	go a.pipeLogs(pr)
+	go a.pipeLogs(pr, func(line string) { wruntime.EventsEmit(a.ctx, "proxy:log", line) })
 
 	go a.proxy.RunServer(a.ctx)
 
@@ -156,16 +159,16 @@ func (a *App) IsRunning() bool {
 
 // GetLogs returns accumulated logs as a string
 func (a *App) GetLogs() string {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.logsMu.Lock()
+	defer a.logsMu.Unlock()
 	return a.logs.String()
 }
 
 // ClearLogs clears the in-memory log buffer
 func (a *App) ClearLogs() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
+	a.logsMu.Lock()
 	a.logs.Reset()
+	a.logsMu.Unlock()
 	wruntime.EventsEmit(a.ctx, "proxy:log:cleared")
 }
 
@@ -211,7 +214,7 @@ func (a *App) OpenHelpUrl() {
 	}
 }
 
-func (a *App) pipeLogs(r io.Reader) {
+func (a *App) pipeLogs(r io.Reader, emit func(string)) {
 	scanner := bufio.NewScanner(r)
 	// increase buffer size for long lines
 	buf := make([]byte, 0, 64*1024)
@@ -219,10 +222,10 @@ func (a *App) pipeLogs(r io.Reader) {
 
 	for scanner.Scan() {
 		line := scanner.Text()
-		a.mu.Lock()
+		a.logsMu.Lock()
 		a.logs.WriteString(line + "\n")
-		a.mu.Unlock()
-		wruntime.EventsEmit(a.ctx, "proxy:log", line)
+		a.logsMu.Unlock()
+		emit(line)
 	}
 }
 
