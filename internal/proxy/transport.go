@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -25,8 +26,9 @@ func (s *server) retryTransport() http.RoundTripper {
 
 	return roundTripperFunc(func(req *http.Request) (*http.Response, error) {
 		host := req.URL.Host
+		useCase := req.Header.Get("X-Atlassian-UseCaseId")
 
-		if err := s.waitForCooldown(req, host); err != nil {
+		if err := s.waitForCooldown(req, host, useCase); err != nil {
 			return nil, err
 		}
 
@@ -39,7 +41,11 @@ func (s *server) retryTransport() http.RoundTripper {
 			limitType := resp.Header.Get("X-RateLimit-Type")
 			wait := nextWait(resp, limitType, attempt)
 
-			s.rateLimiter.markRetryAfter(host, wait)
+			limitedUseCase := ""
+			if resp.StatusCode == http.StatusTooManyRequests && strings.EqualFold(limitType, "MODEL.USE_CASE") {
+				limitedUseCase = useCase
+			}
+			s.rateLimiter.markRetryAfter(host, limitedUseCase, wait)
 			s.Logger.Printf("rate-limited by %s (status=%d type=%q), retry %d/%d after %s",
 				host, resp.StatusCode, limitType, attempt, maxRetryAttempts, wait)
 
@@ -69,8 +75,8 @@ func (s *server) retryTransport() http.RoundTripper {
 	})
 }
 
-func (s *server) waitForCooldown(req *http.Request, host string) error {
-	wait := s.rateLimiter.waitFor(host)
+func (s *server) waitForCooldown(req *http.Request, host, useCase string) error {
+	wait := s.rateLimiter.waitFor(host, useCase)
 	if wait <= 0 {
 		return nil
 	}

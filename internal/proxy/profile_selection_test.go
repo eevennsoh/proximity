@@ -43,7 +43,7 @@ func TestProfileSelectionSnapshotsEachRequest(t *testing.T) {
 }
 
 func TestProfileSwitchRoutesRequestsWithoutRestart(t *testing.T) {
-	requests := make(chan http.Header, 3)
+	requests := make(chan http.Header, 8)
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		requests <- r.Header.Clone()
 		w.Header().Set("Content-Type", "application/json")
@@ -61,8 +61,14 @@ func TestProfileSwitchRoutesRequestsWithoutRestart(t *testing.T) {
 		}
 	}
 	var selected atomic.Value
+	var cycle atomic.Uint64
 	selected.Store("default")
-	s := New(Options{Logger: log.New(io.Discard, "", 0), Config: cfg, DefaultProfile: func() string { return selected.Load().(string) }, Vars: map[string]any{
+	s := New(Options{Logger: log.New(io.Discard, "", 0), Config: cfg, DefaultProfile: func() string {
+		if selected.Load().(string) == "auto" {
+			return []string{"default", "shared-eval"}[(cycle.Add(1)-1)%2]
+		}
+		return selected.Load().(string)
+	}, Vars: map[string]any{
 		"profiles": []map[string]any{
 			{"name": "default", "useCaseId": "own", "atlassianCloudId": "own-cloud"},
 			{"name": "shared-eval", "useCaseId": evaluationUseCaseForTest, "atlassianCloudId": "eval-cloud"},
@@ -101,6 +107,12 @@ func TestProfileSwitchRoutesRequestsWithoutRestart(t *testing.T) {
 	selected.Store("shared-eval")
 	post("/openai/v1/responses", evaluationUseCaseForTest, "eval-cloud")
 	post("/p/default/openai/v1/responses", "own", "own-cloud")
+	selected.Store("auto")
+	post("/p/default/openai/v1/responses", "own", "own-cloud")
+	post("/openai/v1/responses", "own", "own-cloud")
+	post("/openai/v1/responses", evaluationUseCaseForTest, "eval-cloud")
+	post("/p/default/openai/v1/responses", "own", "own-cloud")
+	post("/openai/v1/responses", "own", "own-cloud")
 }
 
 const evaluationUseCaseForTest = "ai-gateway-eval-use-case"
