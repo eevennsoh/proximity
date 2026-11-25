@@ -253,6 +253,8 @@ Proximity supports multiple simultaneous use-cases through profiles. Each profil
 
 In the desktop app, use **Active profile** to choose the default for new requests. The selection is remembered separately from your settings file. Explicit `/p/{profile}` routes and `X-Proximity-Profile` headers override the selection. In staging, the app also offers a shared evaluation profile; use it only for permitted experimentation data.
 
+For eligible staging traffic, choose **Automatic · both use cases** to alternate unqualified requests between the configured default and shared evaluation profiles. This selection affects every client using a default route; explicit profile routes remain pinned. The Logs tab identifies the selected profile for each default request. This is request-based distribution, not a guarantee of equal token usage or available capacity. Per-user and upstream rate limits may still apply.
+
 > **Note:** If you only have a single profile defined, you don't need to use the `/p/{profile}/...` URL prefix or `X-Proximity-Profile` header. The default routes (e.g., `/openai/v1/chat/completions`) will automatically use your single profile.
 
 **Route via URL prefix:**

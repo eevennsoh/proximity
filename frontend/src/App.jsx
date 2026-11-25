@@ -349,12 +349,15 @@ export default function App() {
               <select id="active-profile" value={profiles.selected} onChange={onProfileChange} disabled={profilePending}
                 className="min-w-0 max-w-full rounded-md border border-white/15 bg-neutral-800 px-2 py-1.5 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:opacity-60">
                 {profiles.profiles.map((profile) => (
-                  <option key={profile.name} value={profile.name}>{profile.name}{profile.useCaseId ? ` · ${profile.useCaseId}` : ""}</option>
+                  <option key={profile.name} value={profile.name}>{profile.label || `${profile.name}${profile.useCaseId ? ` · ${profile.useCaseId}` : ""}`}</option>
                 ))}
               </select>
               <span className="text-xs text-slate-400">Applies to new requests. Explicit profile routes still take priority.</span>
               {profiles.profiles.find((profile) => profile.name === profiles.selected)?.useCaseId === "ai-gateway-eval-use-case" && (
                 <span className="w-full text-xs text-slate-400">Shared evaluation is staging-only and subject to experimentation data restrictions.</span>
+              )}
+              {profiles.selected === "__automatic_eligible__" && (
+                <span className="w-full text-xs text-slate-400">Splits all default requests between both use cases. Use only for traffic allowed on shared evaluation.</span>
               )}
               {profileError && <span role="alert" className="w-full text-xs text-red-400">{profileError}</span>}
             </div>

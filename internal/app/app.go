@@ -36,6 +36,8 @@ type App struct {
 	settingsPath string
 	settings     *settings.Struct
 	profileState atomic.Value
+	profileCycle atomic.Uint64
+	autoProfiles []string
 
 	version   string
 	changelog string
@@ -106,7 +108,7 @@ func (a *App) StartProxy() error {
 		Logger:         logger,
 		Config:         a.config,
 		Vars:           a.settings.Vars,
-		DefaultProfile: a.selectedProfile,
+		DefaultProfile: a.profileForRequest,
 		Version:        a.version,
 	})
 

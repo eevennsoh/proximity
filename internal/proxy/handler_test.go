@@ -3,8 +3,10 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -20,6 +22,85 @@ import (
 type observedProxyRequest struct {
 	Host    string
 	Headers http.Header
+}
+
+func TestProxyReportsDNSFailureToClientAndLog(t *testing.T) {
+	for _, protocol := range []string{"", openResponses, openAIResponses, claudeMessages} {
+		t.Run(protocol, func(t *testing.T) {
+			var logs bytes.Buffer
+			s := New(Options{Logger: log.New(&logs, "", 0), Config: &config.Config{}}).(*server)
+			target, err := url.Parse("https://gateway.example.test")
+			require.NoError(t, err)
+			cfg := &endpointProxyConfig{baseEndpoint: target, UriMap: config.UriMap{In: "/test"}, Out: config.OutMethod{Protocol: protocol}}
+			proxy := s.endpointProxy(cfg)
+			proxy.Transport = roundTripperFunc(func(*http.Request) (*http.Response, error) {
+				return nil, &net.OpError{Op: "dial", Net: "tcp", Err: &net.DNSError{Name: "gateway.example.test", Err: "no such host", IsNotFound: true}}
+			})
+			recorder := httptest.NewRecorder()
+			proxy.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/test", nil))
+
+			assert.Equal(t, http.StatusBadGateway, recorder.Code)
+			assert.Contains(t, recorder.Body.String(), "DNS")
+			assert.Contains(t, recorder.Body.String(), "gateway.example.test")
+			assert.Contains(t, logs.String(), "no such host")
+			assert.Contains(t, logs.String(), "/test")
+			if protocol != "" {
+				var body struct {
+					Type  string `json:"type"`
+					Error struct {
+						Type    string `json:"type"`
+						Message string `json:"message"`
+					} `json:"error"`
+				}
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+				assert.Equal(t, "api_error", body.Error.Type)
+				assert.Contains(t, body.Error.Message, "DNS")
+				if protocol == claudeMessages {
+					assert.Equal(t, "error", body.Type)
+				}
+			}
+		})
+	}
+}
+
+func TestProxyPreservesGatewayErrorResponses(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = io.WriteString(w, `{"message":"invalid tenant","requestId":"request-123"}`)
+	}))
+	defer upstream.Close()
+	target, err := url.Parse(upstream.URL)
+	require.NoError(t, err)
+	var logs bytes.Buffer
+	s := New(Options{Logger: log.New(&logs, "", 0), Config: &config.Config{}}).(*server)
+	cfg := &endpointProxyConfig{baseEndpoint: target, UriMap: config.UriMap{In: "/test"}}
+	recorder := httptest.NewRecorder()
+	s.endpointProxy(cfg).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/test", nil))
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.JSONEq(t, `{"message":"invalid tenant","requestId":"request-123"}`, recorder.Body.String())
+	assert.NotContains(t, logs.String(), "proxy error")
+}
+
+func TestProxyReportsResponseTransformationFailure(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{}`)
+	}))
+	defer upstream.Close()
+	target, err := url.Parse(upstream.URL)
+	require.NoError(t, err)
+	var logs bytes.Buffer
+	s := New(Options{Logger: log.New(&logs, "", 0), Config: &config.Config{}}).(*server)
+	cfg := &endpointProxyConfig{baseEndpoint: target, UriMap: config.UriMap{In: "/test"}, RequestResponse: config.RequestResponse{
+		Response: config.OverrideConfig{Body: config.Body{Expr: "missingFunction()"}},
+	}}
+	recorder := httptest.NewRecorder()
+	s.endpointProxy(cfg).ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/test", nil))
+	assert.Equal(t, http.StatusBadGateway, recorder.Code)
+	assert.Contains(t, recorder.Body.String(), "Check Proximity logs")
+	assert.NotContains(t, recorder.Body.String(), "missingFunction")
+	assert.Contains(t, logs.String(), "missingFunction")
 }
 
 // TestHandleEndpointReturnsErrorWhenRequestRenderingFails verifies render errors are not empty 200 responses.

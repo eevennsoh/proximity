@@ -8,10 +8,12 @@ import (
 )
 
 const evaluationUseCase = "ai-gateway-eval-use-case"
+const automaticProfile = "__automatic_eligible__"
 
 type Profile struct {
 	Name      string `json:"name"`
 	UseCaseID string `json:"useCaseId"`
+	Label     string `json:"label,omitempty"`
 }
 
 type ProfileSettings struct {
@@ -27,7 +29,8 @@ func (a *App) initProfiles() {
 	if raw, err := json.Marshal(a.settings.Vars["profiles"]); err == nil {
 		_ = json.Unmarshal(raw, &profiles)
 	}
-	if env, _ := a.settings.Vars["aiGatewayEnv"].(string); env == "" || env == "staging" {
+	env, _ := a.settings.Vars["aiGatewayEnv"].(string)
+	if env == "" || env == "staging" {
 		found := false
 		used := make(map[string]bool)
 		for _, p := range profiles {
@@ -57,6 +60,28 @@ func (a *App) initProfiles() {
 	if selected == "" && len(profiles) > 0 {
 		selected, _ = profiles[0]["name"].(string)
 	}
+	// Automatic routing is available only when a configured primary profile and
+	// the explicitly configured staging evaluation profile are both present.
+	var primary, evaluation string
+	reserved := false
+	for _, p := range profiles {
+		name, _ := p["name"].(string)
+		useCase, _ := p["useCaseId"].(string)
+		cloudID, _ := p["atlassianCloudId"].(string)
+		group, _ := p["adGroup"].(string)
+		if name == automaticProfile {
+			reserved = true
+		}
+		if name == selected && useCase != "" && useCase != evaluationUseCase {
+			primary = name
+		}
+		if useCase == evaluationUseCase && cloudID == "internal-dummy-"+evaluationUseCase && group == "ai-gateway-evaluation-dl-all-atlassian-read" {
+			evaluation = name
+		}
+	}
+	if (env == "" || env == "staging") && !reserved && primary != "" && evaluation != "" {
+		a.autoProfiles = []string{primary, evaluation}
+	}
 	if path, err := a.profilePreferencePath(); err == nil {
 		if data, err := os.ReadFile(path); err == nil {
 			var preference struct {
@@ -79,6 +104,9 @@ func (a *App) profilePreferencePath() (string, error) {
 }
 
 func (a *App) hasProfile(name string) bool {
+	if name == automaticProfile && len(a.autoProfiles) == 2 {
+		return true
+	}
 	for _, p := range a.profileList() {
 		if p.Name == name && name != "" {
 			return true
@@ -107,8 +135,20 @@ func (a *App) selectedProfile() string {
 	return ""
 }
 
+func (a *App) profileForRequest() string {
+	selected := a.selectedProfile()
+	if selected == automaticProfile && len(a.autoProfiles) == 2 {
+		return a.autoProfiles[(a.profileCycle.Add(1)-1)%2]
+	}
+	return selected
+}
+
 func (a *App) GetProfileSettings() ProfileSettings {
-	return ProfileSettings{Selected: a.selectedProfile(), Profiles: a.profileList()}
+	profiles := a.profileList()
+	if len(a.autoProfiles) == 2 {
+		profiles = append(profiles, Profile{Name: automaticProfile, Label: "Automatic · both use cases (eligible traffic only)"})
+	}
+	return ProfileSettings{Selected: a.selectedProfile(), Profiles: profiles}
 }
 
 func (a *App) SetDefaultProfile(name string) error {

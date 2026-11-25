@@ -5,9 +5,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -261,13 +263,31 @@ func (s *server) endpointProxy(cfg *endpointProxyConfig) *httputil.ReverseProxy 
 		ModifyResponse: s.modifyResponse(cfg),
 		Transport:      s.retryTransport(),
 	}
-	if cfg.Out.Protocol == claudeMessages || cfg.Out.Protocol == openAIResponses {
-		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-			s.Logger.Printf("AI Gateway v2 proxy error: %v", err)
-			writeResponsesError(w, cfg.Out.Protocol, http.StatusBadGateway, "AI Gateway request failed")
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		s.Logger.Printf("proxy error on %s: %v", cfg.In, err)
+		message := proxyErrorMessage(err)
+		if cfg.Out.Protocol != "" {
+			writeResponsesError(w, cfg.Out.Protocol, http.StatusBadGateway, message)
+			return
 		}
+		http.Error(w, message, http.StatusBadGateway)
 	}
 	return proxy
+}
+
+func proxyErrorMessage(err error) string {
+	var dnsErr *net.DNSError
+	if errors.As(err, &dnsErr) {
+		if dnsErr.Timeout() {
+			return fmt.Sprintf("Proximity could not resolve %s (DNS lookup timed out). Check your connection and try again.", dnsErr.Name)
+		}
+		return fmt.Sprintf("Proximity could not resolve %s (DNS lookup failed). Check your connection and try again.", dnsErr.Name)
+	}
+	var networkErr net.Error
+	if errors.As(err, &networkErr) && networkErr.Timeout() {
+		return "Proximity's upstream request timed out. Check your connection and try again."
+	}
+	return "Proximity could not complete the upstream request. Check Proximity logs for details."
 }
 
 func (s *server) serveRenderedRequest(w http.ResponseWriter, r *http.Request) {
@@ -465,9 +485,13 @@ func (s *server) buildTemplateInputFromRequest(req *http.Request) (map[string]an
 	}
 
 	vars := s.Vars
-	if s.DefaultProfile != nil {
+	if s.DefaultProfile != nil && req.Header.Get("X-Proximity-Profile") == "" && !strings.HasPrefix(req.URL.Path, "/p/") {
 		vars = maps.Clone(s.Vars)
-		vars["defaultProfile"] = s.DefaultProfile()
+		profile := s.DefaultProfile()
+		vars["defaultProfile"] = profile
+		if s.Logger != nil {
+			s.Logger.Printf("routing %s through profile %s", req.URL.Path, profile)
+		}
 	}
 	templateInput := map[string]any{
 		"path":       req.URL.Path,

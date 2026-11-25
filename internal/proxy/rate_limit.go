@@ -14,34 +14,37 @@ const (
 
 type rateLimitCoordinator struct {
 	mu       sync.Mutex
-	cooldown map[string]time.Time
+	cooldown map[rateLimitKey]time.Time
+}
+
+type rateLimitKey struct {
+	host    string
+	useCase string
 }
 
 func newRateLimitCoordinator() *rateLimitCoordinator {
 	return &rateLimitCoordinator{
-		cooldown: make(map[string]time.Time),
+		cooldown: make(map[rateLimitKey]time.Time),
 	}
 }
 
-func (c *rateLimitCoordinator) waitFor(host string) time.Duration {
+func (c *rateLimitCoordinator) waitFor(host, useCase string) time.Duration {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	until, ok := c.cooldown[host]
-	if !ok {
-		return 0
+	var longest time.Duration
+	for _, key := range []rateLimitKey{{host: host}, {host: host, useCase: useCase}} {
+		remaining := time.Until(c.cooldown[key])
+		if remaining <= 0 {
+			delete(c.cooldown, key)
+		} else if remaining > longest {
+			longest = remaining
+		}
 	}
-
-	remaining := time.Until(until)
-	if remaining <= 0 {
-		delete(c.cooldown, host)
-		return 0
-	}
-
-	return remaining
+	return longest
 }
 
-func (c *rateLimitCoordinator) markRetryAfter(host string, wait time.Duration) {
+func (c *rateLimitCoordinator) markRetryAfter(host, useCase string, wait time.Duration) {
 	if wait <= 0 {
 		return
 	}
@@ -53,7 +56,11 @@ func (c *rateLimitCoordinator) markRetryAfter(host string, wait time.Duration) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.cooldown[host] = time.Now().Add(wait)
+	key := rateLimitKey{host: host, useCase: useCase}
+	until := time.Now().Add(wait)
+	if until.After(c.cooldown[key]) {
+		c.cooldown[key] = until
+	}
 }
 
 // parseRetryAfter inspects Retry-After first (RFC 7231: delta-seconds or
